@@ -418,7 +418,7 @@ class Factory final : public IClassFactory {
  private: LONG refs_ = 1;
 };
 }
-extern "C" HRESULT __declspec(dllexport) WINAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
+STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
   if (!out) return E_POINTER;
   *out = nullptr;
   if (clsid != yanvy::kService) return CLASS_E_CLASSNOTAVAILABLE;
@@ -426,7 +426,7 @@ extern "C" HRESULT __declspec(dllexport) WINAPI DllGetClassObject(REFCLSID clsid
   if (!factory) return E_OUTOFMEMORY;
   HRESULT hr = factory->QueryInterface(iid,out); factory->Release(); return hr;
 }
-extern "C" HRESULT __declspec(dllexport) WINAPI DllCanUnloadNow() { return objects == 0 ? S_OK : S_FALSE; }
+STDAPI DllCanUnloadNow() { return objects == 0 ? S_OK : S_FALSE; }
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
   if (reason == DLL_PROCESS_ATTACH) { module = instance; DisableThreadLibraryCalls(instance); }
   return TRUE;

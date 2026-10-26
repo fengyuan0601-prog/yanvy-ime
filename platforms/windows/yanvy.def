@@ -1,0 +1,4 @@
+LIBRARY "YANVY-TSF"
+EXPORTS
+  DllGetClassObject PRIVATE
+  DllCanUnloadNow PRIVATE
