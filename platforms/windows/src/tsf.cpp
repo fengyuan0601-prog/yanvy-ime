@@ -49,6 +49,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (manager_) return E_UNEXPECTED;
     manager_ = manager; client_ = id;
     schema_=preferred_schema_=yanvy::ReadSchemaPreference(yanvy::ModuleDir(module));
+    preference_revision_=yanvy::ReadInputRevision(yanvy::ModuleDir(module));
     last_pinyin_schema_=schema_?schema_:yanvy::ReadPinyinSchemaPreference(yanvy::ModuleDir(module));
     ComPtr<ITfKeystrokeMgr> keys;
     ComPtr<ITfSource> source;
@@ -231,8 +232,9 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   void RefreshPreference(){
     auto preference=yanvy::ReadSchemaPreference(yanvy::ModuleDir(module));
+    auto revision=yanvy::ReadInputRevision(yanvy::ModuleDir(module));
     last_pinyin_schema_=yanvy::ReadPinyinSchemaPreference(yanvy::ModuleDir(module));
-    if(preference!=preferred_schema_){Cancel();schema_=preferred_schema_=preference;if(schema_)last_pinyin_schema_=schema_;}
+    if(preference!=preferred_schema_||revision!=preference_revision_){Cancel();schema_=preferred_schema_=preference;preference_revision_=std::move(revision);ascii_=false;if(schema_)last_pinyin_schema_=schema_;}
   }
   bool EnsureFocus() {
     if (active_) return true;
@@ -398,6 +400,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   GUID owner_{};
   uint64_t generation_ = 0;
   uint32_t schema_=1,preferred_schema_=1,last_pinyin_schema_=1;
+  std::wstring preference_revision_;
   bool ascii_=false,active_=false,applying_=false;
   RECT caret_{};
   yanvy::Response last_{};

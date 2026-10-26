@@ -46,6 +46,9 @@ inline uint32_t ReadDoubleSchemaPreference(const std::filesystem::path& root) {
   UINT value=GetPrivateProfileIntW(L"input",L"double_schema",2,(root/L"settings.ini").c_str());
   return value>=2&&value<ime::kSchemaCount?value:2;
 }
+inline std::wstring ReadInputRevision(const std::filesystem::path& root) {
+  wchar_t value[64]{};GetPrivateProfileStringW(L"input",L"change_id",L"",value,64,(root/L"settings.ini").c_str());return value;
+}
 inline std::wstring UserSid() {
   HANDLE token = nullptr;
   if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return {};

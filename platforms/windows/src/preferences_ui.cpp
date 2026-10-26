@@ -13,7 +13,7 @@ struct Preferences {
   Appearance display;uint32_t schema=1,pinyin=1,double_schema=2;
   bool Equals(const Preferences& other)const{return display.font_size==other.display.font_size&&display.theme==other.display.theme&&schema==other.schema&&pinyin==other.pinyin&&double_schema==other.double_schema;}
 };
-bool SavePreferences(const std::filesystem::path& ini,const Preferences& value){
+bool SavePreferences(const std::filesystem::path& ini,const Preferences& value,bool apply_input=false){
   GUID guid{};wchar_t name[64]{};if(FAILED(CoCreateGuid(&guid)))return false;StringFromGUID2(guid,name,64);
   auto temporary=ini.parent_path()/(std::wstring(L"settings-pending-")+name+L".ini");
   if(!CopyFileW(ini.c_str(),temporary.c_str(),TRUE)&&GetLastError()!=ERROR_FILE_NOT_FOUND)return false;
@@ -22,6 +22,7 @@ bool SavePreferences(const std::filesystem::path& ini,const Preferences& value){
       WritePrivateProfileStringW(L"display",L"theme",theme.c_str(),temporary.c_str())&&
       WritePrivateProfileStringW(L"input",L"schema",schema.c_str(),temporary.c_str())&&
       WritePrivateProfileStringW(L"input",L"pinyin_schema",pinyin.c_str(),temporary.c_str())&&WritePrivateProfileStringW(L"input",L"double_schema",double_schema.c_str(),temporary.c_str());
+  if(ok&&apply_input)ok=WritePrivateProfileStringW(L"input",L"change_id",name,temporary.c_str())!=FALSE;
   if(ok)ok=MoveFileExW(temporary.c_str(),ini.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=FALSE;
   if(!ok)DeleteFileW(temporary.c_str());
   WritePrivateProfileStringW(nullptr,nullptr,nullptr,ini.c_str());return ok;
@@ -51,7 +52,7 @@ struct View {
     for(auto control:input_controls)ShowWindow(control,page==0?SW_SHOW:SW_HIDE);
     for(auto control:appearance_controls)ShowWindow(control,page==1?SW_SHOW:SW_HIDE);
     EnableWindow(full_radio,current.schema!=0);EnableWindow(double_radio,current.schema!=0);EnableWindow(double_box,current.schema!=0&&current.pinyin>1);
-    EnableWindow(save,!current.Equals(saved));SetWindowTextW(status_window,status.c_str());UpdatePreview();InvalidateRect(window,nullptr,FALSE);
+    EnableWindow(save,page==0||!current.Equals(saved));SetWindowTextW(status_window,status.c_str());UpdatePreview();InvalidateRect(window,nullptr,FALSE);
   }
   void Changed(){status=L"预览已更新，点击“保存更改”后生效。";Sync();}
   void Layout(){
@@ -69,7 +70,7 @@ struct View {
     Fill(buffer,bounds,RGB(245,248,251));Fill(buffer,R(0,0,172,560),RGB(17,48,65));if(icon)DrawIconEx(buffer,D(22),D(26),icon,D(36),D(36),0,nullptr,DI_NORMAL);
     Text(buffer,L"言舟",R(68,25,155,62),strong,RGB(244,250,251));Text(buffer,L"设置",R(24,78,152,103),caption,RGB(172,201,211));Text(buffer,L"默认无学习",R(24,505,154,530),caption,RGB(172,201,211));
     Text(buffer,page==0?L"输入方案":page==1?L"外观":L"关于言舟",R(202,23,524,65),title,p.text);Label(buffer,kVersion,R(530,28,690,58),caption,p.muted,DT_RIGHT);
-    Text(buffer,page==0?L"在这里直接选择，不用记快捷键。":page==1?L"选择喜欢的字号与配色，立即查看示例。":L"免费、开源、离线优先的五笔与拼音输入法。",R(202,70,690,96),caption,p.muted);
+    Text(buffer,page==0?L"选择后保存并应用，不用记快捷键。":page==1?L"选择喜欢的字号与配色，立即查看示例。":L"免费、开源、离线优先的五笔与拼音输入法。",R(202,70,690,96),caption,p.muted);
     if(page==0){
       Rounded(buffer,R(202,112,690,266),D(11),p.background,p.border);Text(buffer,L"拼音方式",R(220,176,668,201),caption,p.muted);
       Rounded(buffer,R(202,286,690,432),D(11),p.background,p.border);Text(buffer,L"双拼方案",R(220,302,332,333),body,p.text);
@@ -96,7 +97,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
     v->double_box=v->Control(L"COMBOBOX",L"双拼方案",CBS_DROPDOWNLIST|WS_TABSTOP,DoubleBox,empty);for(uint32_t i=2;i<ime::kSchemaCount;++i)SendMessageW(v->double_box,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(ime::kSchemaLabels[i]));
     v->font_box=v->Control(L"COMBOBOX",L"候选字号",CBS_DROPDOWNLIST|WS_TABSTOP|WS_VSCROLL,FontBox,empty);for(int i=12;i<=32;++i)SendMessageW(v->font_box,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(std::to_wstring(i).c_str()));
     v->theme_box=v->Control(L"COMBOBOX",L"候选配色",CBS_DROPDOWNLIST|WS_TABSTOP,ThemeBox,empty);for(auto text:{L"跟随系统",L"浅色",L"深色"})SendMessageW(v->theme_box,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
-    for(auto item:{std::pair<int,const wchar_t*>{ResetButton,L"恢复默认"},{HelpButton,L"使用说明"},{SaveButton,L"保存更改"}}){auto control=v->Control(L"BUTTON",item.second,BS_OWNERDRAW|WS_TABSTOP,item.first,empty);if(item.first==SaveButton)v->save=control;}
+    for(auto item:{std::pair<int,const wchar_t*>{ResetButton,L"恢复默认"},{HelpButton,L"使用说明"},{SaveButton,L"保存并应用"}}){auto control=v->Control(L"BUTTON",item.second,BS_OWNERDRAW|WS_TABSTOP,item.first,empty);if(item.first==SaveButton)v->save=control;}
     v->input_controls={v->pinyin_radio,v->wubi_radio,v->full_radio,v->double_radio,v->double_box};v->appearance_controls={v->font_box,v->theme_box};v->status_window=v->Control(L"STATIC",L"",SS_LEFT|SS_CENTERIMAGE,120,empty);v->Layout();return 0;}
   if(message==WM_ERASEBKGND)return 1;
   if(message==WM_PAINT){v->Paint();return 0;}
@@ -113,7 +114,8 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
     if(id==DoubleBox&&event==CBN_SELCHANGE){v->current.schema=v->current.pinyin=v->current.double_schema=2+uint32_t(SendMessageW(v->double_box,CB_GETCURSEL,0,0));v->Changed();return 0;}
     if((id==FontBox||id==ThemeBox)&&event==CBN_SELCHANGE){v->current.display.font_size=12+int(SendMessageW(v->font_box,CB_GETCURSEL,0,0));v->current.display.theme=int(SendMessageW(v->theme_box,CB_GETCURSEL,0,0));v->Changed();return 0;}
     if(id==ResetButton){v->current={};v->Changed();return 0;}
-    if(id==SaveButton){if(SavePreferences(ModuleDir()/L"settings.ini",v->current)){v->saved=v->current;v->status=L"已保存；下次输入生效，未确认编码会取消。";}else v->status=L"保存失败，请检查此安装目录的写入权限。";v->Sync();return 0;}
+    if(id==SaveButton){bool apply=v->page==0||v->current.schema!=v->saved.schema||v->current.pinyin!=v->saved.pinyin||v->current.double_schema!=v->saved.double_schema;
+      if(SavePreferences(ModuleDir()/L"settings.ini",v->current,apply)){v->saved=v->current;v->status=L"已保存；下次输入生效，未确认编码会取消。";}else v->status=L"保存失败，请检查此安装目录的写入权限。";v->Sync();return 0;}
     if(id==HelpButton){auto file=ModuleDir()/L"TESTING.txt";ShellExecuteW(window,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);return 0;}
   }
   if(message==WM_DESTROY){PostQuitMessage(0);return 0;}return DefWindowProcW(window,message,wp,lp);
@@ -134,6 +136,9 @@ int PreferencesFixture(const std::filesystem::path& directory){
   if(!SavePreferences(ini,value)||ReadSchemaPreference(directory)!=4||ReadPinyinSchemaPreference(directory)!=4)return 3;
   auto display=ReadAppearance(directory);if(display.font_size!=32||display.theme!=2)return 4;
   if(ReadDoubleSchemaPreference(directory)!=4)return 4;
+  if(!SavePreferences(ini,value,true))return 11;auto revision=ReadInputRevision(directory);
+  if(revision.empty()||!SavePreferences(ini,value,true)||revision==ReadInputRevision(directory))return 12;
+  revision=ReadInputRevision(directory);if(!SavePreferences(ini,value,false)||revision!=ReadInputRevision(directory))return 13;
   wchar_t custom[64]{};GetPrivateProfileStringW(L"custom",L"synthetic",L"",custom,64,ini.c_str());if(std::wstring(custom)!=L"preserve-me")return 5;
   for(auto file:std::filesystem::directory_iterator(directory))if(file.path().filename().wstring().find(L"pending-")!=std::wstring::npos)return 6;
   if(SavePreferences(directory/L"missing-parent"/L"settings.ini",value))return 7;
