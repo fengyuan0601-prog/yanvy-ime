@@ -1,0 +1,16 @@
+name: 功能建议
+description: 描述要解决的输入场景。
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到了什么输入问题？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议如何改善？
+  - type: markdown
+    attributes:
+      value: "官方版本坚持免费、无广告、不上传输入内容；建议应符合这些原则。"

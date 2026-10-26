@@ -1,0 +1,6 @@
+YANVY 0.1.0-dev source snapshot
+Local commit: 1c7d72470fa71a33e362bfeb7608fc18eacd4093
+Target repository: https://github.com/fengyuan0601-prog/yanvy-ime
+Remote upload has not succeeded: current ChatGPT integration returned HTTP 403 on write.
+See docs/PUBLISH-WITH-CODEX.md for authenticated publishing and continuation.
+Archive omits .git, build outputs and external runtime libraries.

@@ -1,0 +1,4 @@
+# Copy to FUNDING.yml only after a real funding destination is configured
+# and verified by the maintainer. Do not publish placeholder payment links.
+# github: YOUR_VERIFIED_SPONSORS_USERNAME
+# custom: ["YOUR_VERIFIED_SPONSOR_PAGE_URL"]

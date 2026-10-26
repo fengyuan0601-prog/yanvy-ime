@@ -1,0 +1,5 @@
+# Keep pinned source/configuration hashes identical on Windows and Unix.
+* text=auto eol=lf
+*.png -text
+*.ico -text
+*.zip -text

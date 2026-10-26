@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Approved schemas only. No user content is saved by this configuration.
+patch:
+  schema_list:
+    - schema: wubi86
+    - schema: pinyin_simp
+  switcher/save_options: []
+  switcher/fix_schema_list_order: true
+  menu/page_size: 5

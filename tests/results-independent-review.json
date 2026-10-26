@@ -1,0 +1,57 @@
+{
+  "reviewed_at_utc": "2026-10-26T07:52:15.944028+00:00",
+  "reviewer": "independent privacy_review agent",
+  "scope": "Independent targeted regression of the two previously reproduced P1 privacy bypasses and the adjacent compiled-cache alias path; native Linux CLI only.",
+  "binary_sha256": "21ca72825f93c4cfbecb47aeaf6c37c44f99a4e3bf3fad32b43eaf55d56da152",
+  "expected_binary_sha256_matched": true,
+  "engine": "librime 1.10.0",
+  "method": "Fresh isolated profiles staged from the frozen project; subprocess invocation of core/build/ime-core with synthetic commands; user-directory byte hashes and userdb absence checked. No project source was changed and the 42-check full suite was not rerun.",
+  "cases": [
+    {
+      "case": "named_translator_source",
+      "method": "Kept the three translator/ privacy flags false; replaced the effective translator with table_translator@remember and enabled learning in remember/.",
+      "returncode": 1,
+      "ready_emitted": false,
+      "stderr": "ime-core: Refusing profile: trusted source or no-learning patch was modified.",
+      "rejection_gate": "VerifyProfile before Rime setup/initialize/maintenance",
+      "no_user_dictionary_created": true,
+      "user_dictionary_paths": [],
+      "profile_bytes_unchanged_after_attempt": true,
+      "status": "PASS",
+      "no_deployment_metadata_created": true
+    },
+    {
+      "case": "unapproved_initial_schema",
+      "method": "Added a default-learning extra schema and placed it first in schema_list while preserving all approved schema privacy patches.",
+      "returncode": 1,
+      "ready_emitted": false,
+      "stderr": "ime-core: Refusing unexpected user schema, script, or saved dictionary.",
+      "rejection_gate": "VerifyProfile before Rime setup/initialize/maintenance",
+      "no_user_dictionary_created": true,
+      "user_dictionary_paths": [],
+      "profile_bytes_unchanged_after_attempt": true,
+      "status": "PASS",
+      "no_deployment_metadata_created": true
+    },
+    {
+      "case": "named_translator_compiled",
+      "method": "Successfully deployed a clean profile, then changed only the compiled schema to a learning-enabled named translator; source files and privacy patches were unchanged.",
+      "returncode": 1,
+      "ready_emitted": false,
+      "stderr": "ime-core: Refusing schema: approved components or no-learning policy differ.",
+      "rejection_gate": "CheckPrivacy effective-schema validation after maintenance, before create_session",
+      "no_user_dictionary_created": true,
+      "user_dictionary_paths": [],
+      "profile_bytes_unchanged_after_attempt": false,
+      "status": "PASS",
+      "source_and_patch_hashes_unchanged": true,
+      "malicious_cache_still_present_after_rejection": true
+    }
+  ],
+  "result": "PASS",
+  "remaining_limits": [
+    "The first two modified-source cases are rejected before Rime initialization or maintenance; the compiled-cache case is rejected after maintenance but before any input session is created.",
+    "This is a targeted regression result for the exact binary and tested scenarios, not an exhaustive security audit or a guarantee against compromised host software or concurrent local tampering.",
+    "Windows TSF, Android, iOS, installers and platform permissions were not exercised."
+  ]
+}

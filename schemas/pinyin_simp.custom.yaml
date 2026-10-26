@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: BSD-3-Clause
+patch:
+  translator/enable_user_dict: false
+  translator/enable_encoder: false
+  translator/encode_commit_history: false

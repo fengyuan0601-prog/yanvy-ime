@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# The dependency is only used for local reverse lookup.
+patch:
+  schema/dependencies: []
+  reverse_lookup/dictionary: stroke
+  engine/translators:
+    - punct_translator
+    - table_translator
+  translator/enable_user_dict: false
+  translator/enable_encoder: false
+  translator/encode_commit_history: false

@@ -1,0 +1,12 @@
+{
+  "platform": "Linux x86_64",
+  "cmake_version": "3.28.3",
+  "clean_build": "PASS",
+  "clean_binary": "/workspace/scratch/00253c0583be/ime-deps/cmake-verification/clean-build/ime-core",
+  "tampered_build": "EXPECTED_FAILURE",
+  "tampered_exit_code": 2,
+  "compiled_objects_before_failure": 0,
+  "output": "[ 20%] Verifying pinned inputs and the compiled trust policy\nTrust policy differs from source. Review changes before running generate_policy.py --update.\ngmake[3]: *** [CMakeFiles/verify_trusted_policy.dir/build.make:71: CMakeFiles/verify_trusted_policy] Error 1\ngmake[2]: *** [CMakeFiles/Makefile2:86: CMakeFiles/verify_trusted_policy.dir/all] Error 2\ngmake[1]: *** [CMakeFiles/Makefile2:145: CMakeFiles/ime-core.dir/rule] Error 2\ngmake: *** [Makefile:150: ime-core] Error 2\n",
+  "windows_build": "NOT_RUN",
+  "source_change": "core/CMakeLists.txt only"
+}

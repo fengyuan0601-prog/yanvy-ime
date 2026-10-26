@@ -1,0 +1,17 @@
+name: Real Rime core tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  linux-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build-time dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y g++ strace librime-dev=1.10.0+dfsg1-2build2
+      - name: Build actual librime adapter
+        run: python3 scripts/build_core.py
+      - name: Exercise dictionaries, editing, and persistence policy
+        run: python3 tests/test_core.py

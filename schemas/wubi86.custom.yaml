@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Our additive privacy patch; the upstream schema/dictionary keep LGPL-3.0.
+patch:
+  translator/enable_user_dict: false
+  translator/enable_encoder: false
+  translator/encode_commit_history: false
+  translator/enable_sentence: false
+  speller/max_code_length: 4

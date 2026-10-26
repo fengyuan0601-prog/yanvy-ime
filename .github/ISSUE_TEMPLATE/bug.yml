@@ -1,0 +1,25 @@
+name: 输入问题或兼容性问题
+description: 使用合成文本报告可重复的问题，请勿上传私人输入内容。
+body:
+  - type: markdown
+    attributes:
+      value: "请勿提交密码、真实聊天、令牌、个人词库或敏感截图。安全隐私漏洞请先阅读 SECURITY.md。"
+  - type: input
+    id: version
+    attributes:
+      label: 版本或提交
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 系统、应用及输入方式
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤与合成输入
+      description: 使用不含个人信息的短句，说明预期结果和实际结果。
+    validations:
+      required: true
