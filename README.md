@@ -10,7 +10,7 @@
 
 这是 **0.1.0-dev 开发工程**。已开始实现真实的 librime 输入核心，并用固定版本词库做自动验证。
 
-**当前没有可安装的 Windows、Android 或 iPhone 正式版。** `core/build/ime-core` 是开发诊断程序，不能注册为系统输入法。Linux 核心测试不代表 Windows TSF、微信/Office 输入、手机键盘或商店发行已验收。
+**当前没有 Windows、Android 或 iPhone 正式版。** 已新增 Windows x64 的 `0.1.0-dev.1` 原生 TSF 开发测试包构建入口；全局注册、安装卸载和真实应用输入仍待管理员授权后实测，不能作为日用版验收。`core/build/ime-core` 仍是开发诊断程序。验证范围见 [Windows 接续记录](docs/WINDOWS-DEV.md)。
 
 | 能力 | 当前状态 |
 | --- | --- |
@@ -19,7 +19,7 @@
 | 原生 C++ / librime 核心 | 已实现；当前 Linux 构建 42 项集成检查通过 |
 | 五笔 86 与简体拼音候选、提交 | 已实现；具体证据以 `tests/results-core.json` 为准 |
 | 默认不学习与配置保护 | 本轮功能与反例检查通过；原两项绕过及相邻缓存入口已独立复核 |
-| Windows 系统输入法 / 安装包 | 待开发与 Windows 实机验证 |
+| Windows 系统输入法 / 安装包 | TSF、候选窗、引擎进程、设置与 NSIS 测试包源码已实现并编译；系统安装和跨应用输入未验收 |
 | Android / iOS 原生键盘 | 后续阶段 |
 | 九宫格、成熟整句纠错、本地自定义短语 | 后续阶段，不属于当前核心已验证功能 |
 | GitHub 官方仓库 | 已创建公开仓库 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)；当前为 `0.1.0-dev` 源码开发阶段 |
@@ -84,7 +84,7 @@ quit
 | `third_party/` | 外部词库原始文件、许可证和版本锁 |
 | `tests/` | 真实引擎、持久化与配置保护验证 |
 | `scripts/` | 构建、隔离部署和资源导出工具 |
-| `platforms/windows/` | 首发平台接入计划，待实现 TSF |
+| `platforms/windows/` | 原生 TSF、Win32 候选窗、受限设置、离线引擎进程与开发安装包 |
 | `platforms/android/`、`platforms/ios/` | 后续平台范围与限制 |
 | `assets/brand/` | 生成的图标母版和确定尺寸导出 |
 | `docs/` | 产品、路线、命名、品牌及开发交接文件 |
@@ -94,6 +94,10 @@ quit
 从已有核心继续实现 Windows TSF 接入与候选窗，验证记事本、浏览器、微信、Office/WPS 中的输入、取消组合、切换焦点、快捷键和不同 DPI；随后制作安装卸载流程。不要用网页输入框或诊断 CLI 代替系统输入法交付。
 
 完整任务在 [开发交接](docs/CODEX-HANDOFF.md)。
+
+## Windows 开发测试
+
+首次源码发布与 Actions 记录见 [发布结果](docs/PUBLISH-RESULT.md)。Windows 构建、测试包限制及下一步实机检查见 [Windows 说明](platforms/windows/README.md) 和 [接续记录](docs/WINDOWS-DEV.md)。开发测试包未签名，仅供合成文本验证；尚无手机安装包。
 
 ## 参与与维护
 

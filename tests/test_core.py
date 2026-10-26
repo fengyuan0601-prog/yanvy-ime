@@ -40,7 +40,7 @@ def main():
             if trace:
                 command = ["strace", "-f", "-e", "trace=network", "-o", str(base / "network.trace")] + command
             result = subprocess.run(command, input="\n".join(commands + ["quit"]) + "\n",
-                                    capture_output=True, text=True, timeout=120)
+                                    capture_output=True, text=True, encoding="utf-8", timeout=120)
             if expect_success:
                 if result.returncode != 0:
                     raise AssertionError("Real core failed: " + result.stderr)
@@ -67,7 +67,7 @@ def main():
         switch = run(["schema pinyin_simp", "keys nihao", "schema wubi86", "state"])
         check("schema_switch_cancels_pending_text", not switch[2]["input"] and not switch[2]["commit"])
         reject = subprocess.run([str(binary), str(shared), str(user)], input="schema untrusted\nquit\n",
-                                capture_output=True, text=True, timeout=120)
+                                capture_output=True, text=True, encoding="utf-8", timeout=120)
         check("unapproved_schema_rejected", reject.returncode == 0 and '"error"' in reject.stdout)
 
         commands = ["schema wubi86", "keys wqvb", "clear"]
@@ -152,7 +152,7 @@ def main():
             attack("symlinked_privacy_patch", symlink_patch, immutable=True)
 
         report = {"tested_at_utc": datetime.now(timezone.utc).isoformat(),
-                  "scope": "Native Linux librime core only; no Windows TSF/mobile integration was tested.",
+                  "scope": f"Native {sys.platform} librime core only; no Windows TSF/mobile integration was tested.",
                   "engine": "librime", "engine_version": version,
                   "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                   "learning": False, "checks": checks, "network_trace": network_trace,

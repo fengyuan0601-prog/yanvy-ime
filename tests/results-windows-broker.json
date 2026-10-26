@@ -1,0 +1,132 @@
+{
+  "tested_at_utc": "2026-10-26T11:12:24.415622+00:00",
+  "scope": "Windows native broker, local IPC and real librime. No real application or installation compatibility implied.",
+  "server_sha256": "d976b4c4144c65ddc5ccfce2203c1c7da81956d60761aaa2805b9cf9d3361d56",
+  "checks": [
+    {
+      "name": "cross_arch_protocol_layout",
+      "status": "PASS"
+    },
+    {
+      "name": "first_focus_has_no_old_composition",
+      "status": "PASS"
+    },
+    {
+      "name": "real_wubi86_candidates",
+      "status": "PASS"
+    },
+    {
+      "name": "number_selects_second_candidate",
+      "status": "PASS"
+    },
+    {
+      "name": "space_commits_once",
+      "status": "PASS"
+    },
+    {
+      "name": "new_focus_discards_other_document_preedit",
+      "status": "PASS"
+    },
+    {
+      "name": "stale_owner_cannot_send_keys",
+      "status": "PASS"
+    },
+    {
+      "name": "real_pinyin_candidates",
+      "status": "PASS"
+    },
+    {
+      "name": "old_focus_out_does_not_clear_new_focus",
+      "status": "PASS"
+    },
+    {
+      "name": "backspace_edits_current_owner_only",
+      "status": "PASS"
+    },
+    {
+      "name": "escape_cancels_without_commit",
+      "status": "PASS"
+    },
+    {
+      "name": "schema_switch_cancels_pending_text",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "second_candidate_is_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "no_learning_candidate_order",
+      "status": "PASS"
+    },
+    {
+      "name": "no_userdb_in_broker_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "no_body_logs_in_broker_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "synthetic_canary_not_persisted",
+      "status": "PASS"
+    }
+  ],
+  "profile_files": [
+    "build\\default.yaml",
+    "build\\pinyin_simp.prism.bin",
+    "build\\pinyin_simp.reverse.bin",
+    "build\\pinyin_simp.schema.yaml",
+    "build\\pinyin_simp.table.bin",
+    "build\\stroke.prism.bin",
+    "build\\stroke.reverse.bin",
+    "build\\stroke.schema.yaml",
+    "build\\stroke.table.bin",
+    "build\\wubi86.prism.bin",
+    "build\\wubi86.reverse.bin",
+    "build\\wubi86.schema.yaml",
+    "build\\wubi86.table.bin",
+    "default.custom.yaml",
+    "installation.yaml",
+    "pinyin_simp.custom.yaml",
+    "stroke.custom.yaml",
+    "user.yaml",
+    "wubi86.custom.yaml"
+  ]
+}

@@ -1,0 +1,46 @@
+name: Windows native build and real core
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned build-time SDK
+        shell: pwsh
+        run: python scripts/fetch_windows_sdk.py --cache-dir .deps/cache --sdk-dir .deps/rime
+      - name: Build real TSF, broker and core
+        shell: pwsh
+        run: |
+          $sdk = (Resolve-Path .deps/rime/dist).Path.Replace('\','/')
+          cmake -S platforms/windows -B build/windows -G "Visual Studio 17 2022" -A x64 "-DRIME_INCLUDE_DIR=$sdk/include" "-DRIME_LIBRARY=$sdk/lib/rime.lib"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/windows --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item .deps/rime/dist/lib/rime.dll build/windows/Release
+          Copy-Item .deps/rime/dist/lib/rime.dll build/windows/core/Release
+      - name: Core privacy and editing regressions
+        shell: pwsh
+        env:
+          PYTHONUTF8: '1'
+        run: python tests/test_core.py --binary build/windows/core/Release/ime-core.exe --report build/windows/core-results.json
+      - name: COM ABI and broker isolation
+        shell: pwsh
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          & build/windows/Release/YANVY-Setup.exe --com-smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/stage_data.py --shared-dir build/windows/Release/data --user-dir build/windows/Release/profile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $server = Start-Process build/windows/Release/YANVY-Server.exe -ArgumentList --serve -WindowStyle Hidden -PassThru
+          try {
+            Start-Sleep -Seconds 5
+            python tests/test_windows_broker.py --root build/windows/Release --report build/windows/broker-results.json
+            $result = $LASTEXITCODE
+          } finally {
+            & build/windows/Release/YANVY-Server.exe --stop
+            $server.WaitForExit(5000) | Out-Null
+          }
+          exit $result

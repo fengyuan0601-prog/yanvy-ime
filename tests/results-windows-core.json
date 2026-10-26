@@ -1,0 +1,190 @@
+{
+  "tested_at_utc": "2026-10-26T11:05:22.616440+00:00",
+  "scope": "Native win32 librime core only; no Windows TSF/mobile integration was tested.",
+  "engine": "librime",
+  "engine_version": "1.10.0",
+  "binary_sha256": "f069fc04f24d1d22dd03f3e20c7877964be4ff598bd6f403f8adc7c64586bd41",
+  "learning": false,
+  "checks": [
+    {
+      "name": "wubi86_real_candidates",
+      "status": "PASS"
+    },
+    {
+      "name": "wubi86_space_commit",
+      "status": "PASS"
+    },
+    {
+      "name": "wubi86_backspace",
+      "status": "PASS"
+    },
+    {
+      "name": "escape_cancels_without_commit",
+      "status": "PASS"
+    },
+    {
+      "name": "pinyin_real_candidates",
+      "status": "PASS"
+    },
+    {
+      "name": "pinyin_phrase_commit",
+      "status": "PASS"
+    },
+    {
+      "name": "pinyin_two_character_phrase",
+      "status": "PASS"
+    },
+    {
+      "name": "pinyin_backspace",
+      "status": "PASS"
+    },
+    {
+      "name": "schema_switch_cancels_pending_text",
+      "status": "PASS"
+    },
+    {
+      "name": "unapproved_schema_rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "repeated_second_candidate_really_committed",
+      "status": "PASS"
+    },
+    {
+      "name": "candidate_order_stable_after_repeated_selection",
+      "status": "PASS"
+    },
+    {
+      "name": "candidate_order_stable_after_restart",
+      "status": "PASS"
+    },
+    {
+      "name": "no_user_dictionary_database_created",
+      "status": "PASS"
+    },
+    {
+      "name": "typed_canary_not_written_to_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "no_input_log_files_created",
+      "status": "PASS"
+    },
+    {
+      "name": "no_ip_networking_observed_during_real_input",
+      "status": "SKIP",
+      "reason": "strace is unavailable"
+    },
+    {
+      "name": "learning_patch_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "learning_patch_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "learning_patch_did_not_modify_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "named_translator_source_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "named_translator_source_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "named_translator_source_did_not_modify_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "unapproved_initial_schema_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "unapproved_initial_schema_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "unapproved_initial_schema_did_not_modify_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "unexpected_lua_file_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "unexpected_lua_file_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "unexpected_lua_file_did_not_modify_profile",
+      "status": "PASS"
+    },
+    {
+      "name": "named_translator_compiled_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "named_translator_compiled_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_initial_schema_list_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_initial_schema_list_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_lua_filter_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_lua_filter_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_keybinding_schema_jump_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_keybinding_schema_jump_did_not_create_userdb",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_dictionary_redirect_rejected_before_session",
+      "status": "PASS"
+    },
+    {
+      "name": "compiled_dictionary_redirect_did_not_create_userdb",
+      "status": "PASS"
+    }
+  ],
+  "network_trace": null,
+  "profile_files": [
+    "default.custom.yaml",
+    "installation.yaml",
+    "pinyin_simp.custom.yaml",
+    "stroke.custom.yaml",
+    "user.yaml",
+    "wubi86.custom.yaml",
+    "build\\default.yaml",
+    "build\\pinyin_simp.prism.bin",
+    "build\\pinyin_simp.reverse.bin",
+    "build\\pinyin_simp.schema.yaml",
+    "build\\pinyin_simp.table.bin",
+    "build\\stroke.prism.bin",
+    "build\\stroke.reverse.bin",
+    "build\\stroke.schema.yaml",
+    "build\\stroke.table.bin",
+    "build\\wubi86.prism.bin",
+    "build\\wubi86.reverse.bin",
+    "build\\wubi86.schema.yaml",
+    "build\\wubi86.table.bin"
+  ],
+  "privacy_limit": "These checks cover the exercised build and scenarios, not a security certification or protection against the OS/host application."
+}

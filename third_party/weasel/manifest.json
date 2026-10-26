@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/rime/weasel",
+  "commit": "9cc96e20dc71b80876b12f689bb5863c76c2a7ed",
+  "files_sha256": {
+    "include/KeyEvent.h": "7c3db9b8efcd02aac86eeab21cc27d8a7c810f50d7c7b5e54b7cdde62437b652",
+    "WeaselTSF/Composition.cpp": "74901a988f0e384da1efc0fcb43990efa2a69b9914bf352f52040e9e27cfb843",
+    "WeaselTSF/EditSession.h": "7d3018998d5fa7ef9c7c8a336c7f7e158eac6f38e0e8bd862cd09ff8febf0efe",
+    "WeaselTSF/KeyEvent.cpp": "24bb1a75af19ec7d2eaefa521284557e1c80042868699a151b8c3ff165086d22",
+    "WeaselTSF/Register.cpp": "17cf901d802797d1826e377dbcc609ebede78750b71f465df7f6a164805e3341",
+    "WeaselTSF/TextEditSink.cpp": "8fff8fb1d512d685ebd3bcc8f95b01fee321bf5cd23871b2287f06595d8be0fa",
+    "WeaselTSF/ThreadMgrEventSink.cpp": "1bcecae0d06e5effc888fbe29444205d363daa1ae604e06ce57d71c5ebd44e67"
+  }
+}

@@ -3,3 +3,6 @@
 *.png -text
 *.ico -text
 *.zip -text
+# Preserve the exact upstream bytes recorded in the Windows source manifests.
+third_party/weasel/** -text -whitespace
+third_party/windows-runtime/** -text -whitespace

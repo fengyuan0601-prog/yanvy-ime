@@ -11,7 +11,10 @@
 | rime-prelude、rime-stroke | 保留上游 LGPL-3.0 许可原文、作者与 commit |
 | PicoSHA2 | MIT；`third_party/picosha2/LICENSE`，用于启动前校验固定输入文件的 SHA-256 |
 | 品牌 PNG 与尺寸导出 | 本项目 AI 生成视觉素材；来源、用途和导出记录见 `assets/brand/PROVENANCE.md` |
-| 未来 Weasel / Trime 衍生前端 | 若实际引入，按所用上游版本的 GPL 条款保留对应源码与许可；当前未引入其前端源码 |
+| Windows TSF 衍生前端 | 已复用 Weasel 0.17.4 的部分 TSF 机制；衍生文件采用 GPL-3.0-or-later，原始参考、许可和修改说明见 `third_party/weasel/` |
+| Windows x64 官方 Rime SDK 二进制 | 固定 librime 1.10.0 的 clang 构建；归档还编入 octagram（GPL-3.0）等可选插件，因此组合 DLL 按 GPL 提供对应源码与依赖许可，不能只用 librime 的 BSD 许可概括；本项目只加载 default 模块，不启用这些插件 |
+| Windows 编译器运行库 | MinGW 静态运行库按 GCC Runtime Library Exception 和上游附带许可分发；见 `third_party/windows-runtime/` |
+| 未来 Trime 前端 | 尚未引入，若实际复用按对应版本许可处理 |
 | 未来 iOS 前端及词库组合 | 逐项核查其代码、数据、依赖和发行条件，尚未完成 App Store 许可审查 |
 
 精确上游版本、文件 SHA-256 与本轮实测依赖包见 `third_party/manifest.lock.json`。原始上游文件不作静默修改；本项目修改放在明确的补丁或适配器中。

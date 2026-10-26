@@ -3,6 +3,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <filesystem>
 
 static std::string Json(const std::string& s) {
   std::string out = "\"";
@@ -27,7 +28,11 @@ static void Print(const ime::Snapshot& s) {
   std::cout << "]}" << std::endl;
 }
 
+#ifdef _WIN32
+int wmain(int argc, wchar_t** argv) {
+#else
 int main(int argc, char** argv) {
+#endif
   if (argc != 3) {
     std::cerr << "Usage: ime-core SHARED_DATA_DIR USER_DATA_DIR\n"
         << "Commands: schema wubi86|pinyin_simp; keys ASCII; key space|backspace|escape|enter|page_down; state; clear; quit\n"
@@ -35,7 +40,11 @@ int main(int argc, char** argv) {
     return 2;
   }
   try {
+#ifdef _WIN32
+    ime::Engine engine(std::filesystem::path(argv[1]).u8string(), std::filesystem::path(argv[2]).u8string());
+#else
     ime::Engine engine(argv[1], argv[2]);
+#endif
     std::cout << "{\"ready\":true,\"engine\":\"librime\",\"version\":"
         << Json(engine.Version()) << ",\"learning\":false}" << std::endl;
     std::string line;

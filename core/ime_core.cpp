@@ -7,6 +7,9 @@
 #include <iterator>
 #include <set>
 #include <stdexcept>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace ime {
 namespace {
@@ -14,6 +17,11 @@ namespace fs = std::filesystem;
 
 void NoSymlink(const fs::path& path) {
   for (auto p = path; !p.empty(); p = p.parent_path()) {
+#ifdef _WIN32
+    const DWORD attributes = GetFileAttributesW(p.c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+      throw std::runtime_error("Refusing reparse point in protected data path.");
+#endif
     if (fs::is_symlink(fs::symlink_status(p)))
       throw std::runtime_error("Refusing symlink in protected data path.");
     if (p == p.parent_path()) break;
@@ -110,11 +118,11 @@ bool SafeKeyBindings(RimeApi* api, RimeConfig* c) {
 }  // namespace
 
 Engine::Engine(const std::string& shared_dir, const std::string& user_dir)
-    : shared_dir_(std::filesystem::absolute(shared_dir).lexically_normal().string()),
-      user_dir_(std::filesystem::absolute(user_dir).lexically_normal().string()) {
+    : shared_dir_(fs::absolute(fs::u8path(shared_dir)).lexically_normal().u8string()),
+      user_dir_(fs::absolute(fs::u8path(user_dir)).lexically_normal().u8string()) {
   // Reject imported executable configuration before Rime maintenance can
   // write metadata, upgrade user dictionaries, or construct any session.
-  VerifyProfile(shared_dir_, user_dir_);
+  VerifyProfile(fs::u8path(shared_dir_), fs::u8path(user_dir_));
   api_ = rime_get_api();
   RimeTraits traits{};
   RIME_STRUCT_INIT(RimeTraits, traits);
@@ -133,6 +141,13 @@ Engine::Engine(const std::string& shared_dir, const std::string& user_dir)
   api_->initialize(&traits);
   initialized_ = true;
   try {
+    // Windows maintenance can rebuild a modified cache from safe sources.
+    // Inspect an existing cache before maintenance as well, so tampering is
+    // consistently rejected instead of silently repaired on one platform.
+    if (fs::is_directory(fs::u8path(user_dir_) / "build")) {
+      CheckDefaultPolicy();
+      for (const char* id : {"wubi86", "pinyin_simp", "stroke"}) CheckPrivacy(id);
+    }
     if (api_->start_maintenance(True)) api_->join_maintenance_thread();
     CheckDefaultPolicy();
     // Validate before create_session(): an unsafe schema must never get a
@@ -229,9 +244,18 @@ Snapshot Engine::State() {
   if (api_->get_context(session_, &context)) {
     if (context.composition.preedit) result.preedit = context.composition.preedit;
     result.page = context.menu.page_no;
+    result.highlighted = context.menu.highlighted_candidate_index;
+    result.last_page = context.menu.is_last_page;
+    result.cursor = context.composition.cursor_pos;
     for (int i = 0; i < context.menu.num_candidates; ++i)
       result.candidates.emplace_back(context.menu.candidates[i].text);
     api_->free_context(&context);
+  }
+  RimeStatus status{};
+  RIME_STRUCT_INIT(RimeStatus, status);
+  if (api_->get_status(session_, &status)) {
+    result.ascii_mode = status.is_ascii_mode;
+    api_->free_status(&status);
   }
   RimeCommit commit{};
   RIME_STRUCT_INIT(RimeCommit, commit);

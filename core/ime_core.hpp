@@ -12,6 +12,10 @@ struct Snapshot {
   std::string preedit;
   std::string commit;
   int page = 0;
+  int highlighted = 0;
+  int cursor = 0;
+  bool last_page = true;
+  bool ascii_mode = false;
   std::vector<std::string> candidates;
 };
 

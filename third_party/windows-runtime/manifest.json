@@ -1,0 +1,28 @@
+{
+  "rime_version": "1.10.0",
+  "rime_commit": "295cb2ab68f89ee9d3237c7d4b8033bda3f3b635",
+  "sdk_archive_sha256": "5ceffc5f93312829c66adfd10eda5160b1802af955aa66ae2bdfd88286d9d363",
+  "rime_dll_sha256": "6f86dd496524684f195bb89f3fb13fdf61a6b8e551c15353fac4e5955c945c1a",
+  "lua_thirdparty_commit": "9c53b362229766a97b83683b9541c46679118a90",
+  "boost_source_archive": "boost-1.84.0.7z",
+  "boost_source_sha256": "ce132f85fc706aa8b5c7e6e52a8338de33a688e92e7c8fada3713194b109232e",
+  "licenses_sha256": {
+    "boost-LICENSE.txt": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+    "darts-clone-LICENSE.txt": "521de7c11cd32d5542b67876bb973572af2f5400dc47bed01be3fa37102fdd29",
+    "GCC-COPYING3.txt": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "GCC-RUNTIME-EXCEPTION.txt": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+    "glog-LICENSE.txt": "0fc497129c5c69ff6f22da6933c7e4aaef082fde8437fd57680c2780100772a4",
+    "leveldb-LICENSE.txt": "ccc19f1da0798ed666609b65a5b44dd8b3abe6fc08b9c0592eb76e82e174db19",
+    "librime-lua-LICENSE.txt": "c6bd4f58b13ae9d45c5e53adddeea5049114a25862797c6c6f64920431eea249",
+    "librime-octagram-LICENSE.txt": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "librime-predict-LICENSE.txt": "9b1bbdf15a381884b47dfd9422e68f6382170b2841c476afc076f2d448c7a59f",
+    "lua-5.4.6-LICENSE.txt": "88d19ec70ed494a85a2cad2e11629f9161640c2e71823a78db2d9c88150723da",
+    "marisa-trie-LICENSE.txt": "c0e214362b4dcf118371b02c87321f64a4d8317112d732b6d768167a635f383a",
+    "opencc-LICENSE.txt": "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308",
+    "opencc-marisa-LICENSE.txt": "6d417c47d2650cb4afad4e7a9bc29be3ad266459e8842833188d0bb02f110faf",
+    "rapidjson-LICENSE.txt": "a140e5d46fe734a1c78f1a3c3ef207871dd75648be71fdda8e309b23ab8b1f32",
+    "utf8cpp-LICENSE.txt": "0f18d4635e87034c730a4dd10c7af526ce40cc91bcd3e5a9a3991bc24747b4ee",
+    "winpthreads-LICENSE.txt": "63263614cdd29f2f93cba85e992f041b31f9fc7b4033692f31269489a8a1b177",
+    "yaml-cpp-LICENSE.txt": "aa6fcc27be034e41e21dd832f9175bfe694a48491d9e14ff0fa278e19ad14f1b"
+  }
+}

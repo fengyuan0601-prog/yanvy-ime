@@ -1,0 +1,56 @@
+[
+  {
+    "File": "COPYING",
+    "Ref": "b33e3bad4c46c8a6345525fd822af355e5ef9446",
+    "Repo": "google/glog",
+    "Name": "glog"
+  },
+  {
+    "File": "LICENSE",
+    "Ref": "99b3c03b3284f5886f9ef9a4ef703d57373e61be",
+    "Repo": "google/leveldb",
+    "Name": "leveldb"
+  },
+  {
+    "File": "COPYING.md",
+    "Ref": "0d4e8ab58eec355facf8f65ff11ef811b330e373",
+    "Repo": "rime/marisa-trie",
+    "Name": "marisa-trie"
+  },
+  {
+    "File": "LICENSE",
+    "Ref": "e5d6c5f1b78e28a5797e7ad3ede3513314e544b7",
+    "Repo": "BYVoid/OpenCC",
+    "Name": "opencc"
+  },
+  {
+    "File": "LICENSE",
+    "Ref": "f7320141120f720aecc4c32be25586e7da9eb978",
+    "Repo": "jbeder/yaml-cpp",
+    "Name": "yaml-cpp"
+  },
+  {
+    "File": "LICENSE_1_0.txt",
+    "Ref": "boost-1.84.0",
+    "Repo": "boostorg/boost",
+    "Name": "boost"
+  },
+  {
+    "File": "LICENSE",
+    "Ref": "7f3eca2ce659fc2401b8acb52bd2182b433e12b1",
+    "Repo": "hchunhui/librime-lua",
+    "Name": "librime-lua"
+  },
+  {
+    "File": "LICENSE",
+    "Ref": "bd12863f45fbbd5c7db06d5ec8be8987b10253bf",
+    "Repo": "lotem/librime-octagram",
+    "Name": "librime-octagram"
+  },
+  {
+    "File": "LICENSE",
+    "Ref": "72e4d717e56c6542569c88b317700b3471164c42",
+    "Repo": "rime/librime-predict",
+    "Name": "librime-predict"
+  }
+]

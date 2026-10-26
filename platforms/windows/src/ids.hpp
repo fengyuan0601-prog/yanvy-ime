@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#pragma once
+#include <windows.h>
+namespace yanvy {
+inline constexpr GUID kService{0xf0f81899,0x01e7,0x4f10,{0x9c,0x09,0x9c,0x8c,0x36,0x67,0x41,0x84}};
+inline constexpr GUID kProfile{0xa95f02d3,0x1161,0x4b4b,{0x82,0x9a,0xe4,0xc9,0x0f,0x97,0x3b,0x8c}};
+inline constexpr wchar_t kClsid[] = L"{F0F81899-01E7-4F10-9C09-9C8C36674184}";
+inline constexpr wchar_t kName[] = L"言舟 · YANVY (开发测试)";
+inline constexpr LANGID kLanguage = 0x0804;
+}
