@@ -52,9 +52,9 @@ struct View {
     for(auto control:input_controls)ShowWindow(control,page==0?SW_SHOW:SW_HIDE);
     for(auto control:appearance_controls)ShowWindow(control,page==1?SW_SHOW:SW_HIDE);
     EnableWindow(full_radio,current.schema!=0);EnableWindow(double_radio,current.schema!=0);EnableWindow(double_box,current.schema!=0&&current.pinyin>1);
-    EnableWindow(save,page==0||!current.Equals(saved));SetWindowTextW(status_window,status.c_str());UpdatePreview();InvalidateRect(window,nullptr,FALSE);
+    EnableWindow(save,page==0||!current.Equals(saved));ShowWindow(GetDlgItem(window,ResetButton),page==2?SW_HIDE:SW_SHOW);SetWindowTextW(status_window,status.c_str());UpdatePreview();InvalidateRect(window,nullptr,FALSE);
   }
-  void Changed(){status=L"预览已更新，点击“保存更改”后生效。";Sync();}
+  void Changed(){status=L"预览已更新，保存并应用后生效。";Sync();}
   void Layout(){
     auto place=[&](int id,RECT r){auto control=GetDlgItem(window,id);SetWindowPos(control,nullptr,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_NOZORDER|SWP_NOACTIVATE);SendMessageW(control,WM_SETFONT,reinterpret_cast<WPARAM>(body),TRUE);};
     place(NavInput,R(16,126,156,169));place(NavAppearance,R(16,182,156,225));place(NavAbout,R(16,238,156,281));
@@ -113,7 +113,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
     if(id==FullRadio){v->current.schema=v->current.pinyin=1;v->Changed();return 0;}if(id==DoubleRadio){v->current.schema=v->current.pinyin=v->current.double_schema;v->Changed();return 0;}
     if(id==DoubleBox&&event==CBN_SELCHANGE){v->current.schema=v->current.pinyin=v->current.double_schema=2+uint32_t(SendMessageW(v->double_box,CB_GETCURSEL,0,0));v->Changed();return 0;}
     if((id==FontBox||id==ThemeBox)&&event==CBN_SELCHANGE){v->current.display.font_size=12+int(SendMessageW(v->font_box,CB_GETCURSEL,0,0));v->current.display.theme=int(SendMessageW(v->theme_box,CB_GETCURSEL,0,0));v->Changed();return 0;}
-    if(id==ResetButton){v->current={};v->Changed();return 0;}
+    if(id==ResetButton){if(v->page==0){v->current.schema=v->current.pinyin=1;v->current.double_schema=2;}else if(v->page==1)v->current.display={};v->Changed();return 0;}
     if(id==SaveButton){bool apply=v->page==0||v->current.schema!=v->saved.schema||v->current.pinyin!=v->saved.pinyin||v->current.double_schema!=v->saved.double_schema;
       if(SavePreferences(ModuleDir()/L"settings.ini",v->current,apply)){v->saved=v->current;v->status=L"已保存；下次输入生效，未确认编码会取消。";}else v->status=L"保存失败，请检查此安装目录的写入权限。";v->Sync();return 0;}
     if(id==HelpButton){auto file=ModuleDir()/L"TESTING.txt";ShellExecuteW(window,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);return 0;}
@@ -136,7 +136,8 @@ int PreferencesFixture(const std::filesystem::path& directory){
   if(!SavePreferences(ini,value)||ReadSchemaPreference(directory)!=4||ReadPinyinSchemaPreference(directory)!=4)return 3;
   auto display=ReadAppearance(directory);if(display.font_size!=32||display.theme!=2)return 4;
   if(ReadDoubleSchemaPreference(directory)!=4)return 4;
-  if(!SavePreferences(ini,value,true))return 11;auto revision=ReadInputRevision(directory);
+  if(!SavePreferences(ini,value,true))return 11;
+  auto revision=ReadInputRevision(directory);
   if(revision.empty()||!SavePreferences(ini,value,true)||revision==ReadInputRevision(directory))return 12;
   revision=ReadInputRevision(directory);if(!SavePreferences(ini,value,false)||revision!=ReadInputRevision(directory))return 13;
   wchar_t custom[64]{};GetPrivateProfileStringW(L"custom",L"synthetic",L"",custom,64,ini.c_str());if(std::wstring(custom)!=L"preserve-me")return 5;
