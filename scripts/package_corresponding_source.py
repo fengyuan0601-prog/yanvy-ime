@@ -58,11 +58,11 @@ def main():
                         info.filename=prefix+name
                         out.writestr(info,src.read(name))
             out.write(a.boost_archive,"dependencies/"+a.boost_archive.name,compress_type=zipfile.ZIP_STORED)
-            records={"version":"0.1.0-dev.1","yanvy_commit":head(ROOT),"rime_sdk":manifest,
+            records={"version":"0.1.0-dev.2","yanvy_commit":head(ROOT),"rime_sdk":manifest,
                      "components":[{"path":prefix,"commit":revision} for _,prefix,revision in components]}
             out.writestr("SOURCE-MANIFEST.json",json.dumps(records,indent=2)+"\n")
             out.writestr("README-CORRESPONDING-SOURCE.txt",
-                "YANVY 0.1.0-dev.1 Windows test build corresponding sources\n\n"
+                "YANVY 0.1.0-dev.2 Windows test build corresponding sources\n\n"
                 "Keep this source archive with the installer when redistributing.\n"
                 "yanvy-ime/ contains all committed platform, engine adapter, installer scripts,\n"
                 "data sources and original licenses. Its platform README gives build steps.\n"

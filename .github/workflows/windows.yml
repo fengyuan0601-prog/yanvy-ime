@@ -25,6 +25,15 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: python tests/test_core.py --binary build/windows/core/Release/ime-core.exe --report build/windows/core-results.json
+      - name: Render native candidate UI at three scales
+        shell: pwsh
+        run: |
+          cmake --build build/windows --config Release --target YANVY-UI-Render
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($dpi in 96,144,192) {
+            & build/windows/Release/YANVY-UI-Render.exe "build/windows/candidates-$dpi.png" $dpi
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: COM ABI and broker isolation
         shell: pwsh
         env:

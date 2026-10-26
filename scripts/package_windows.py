@@ -48,12 +48,16 @@ def main():
         raise SystemExit("Commit the reviewed sources before creating a distributable package.")
     records={str(f.relative_to(a.stage)).replace("\\","/"):hashlib.sha256(f.read_bytes()).hexdigest()
              for f in a.stage.rglob("*") if f.is_file()}
-    info={"version":"0.1.0-dev.1","architecture":"x64","unsigned":True,
+    info={"version":"0.1.0-dev.2","architecture":"x64","unsigned":True,
           "source_commit":commit,"source_url":f"https://github.com/fengyuan0601-prog/yanvy-ime/tree/{commit}",
           "created_at_utc":datetime.now(timezone.utc).isoformat(),"rime":"1.10.0",
-          "files_sha256":records,"system_registration_and_real_app_tests":"NOT RUN: require Windows administrator authorization"}
+          "files_sha256":records,
+          "verification_scope":{
+              "dev1_usage":"Maintainer reports installed dev.1 is being used for real input; no complete application matrix",
+              "dev2_ui":"Native settings save/reopen/defaults and 18/32 font preview checked; painter rendered at 96/144/192 DPI",
+              "dev2_system_upgrade_and_application_matrix":"NOT RUN; user installation and further real application verification required"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-    (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY 0.1.0-dev.1\n"+commit+"\n",encoding="utf-8")
+    (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY 0.1.0-dev.2\n"+commit+"\n",encoding="utf-8")
     files=sorted((f for f in a.stage.rglob("*") if f.is_file()),key=lambda f:str(f))
     lines=['; Generated exact-file removal list. Never recursively delete a user-selected directory.']
     lines += ['Delete /REBOOTOK "$INSTDIR\\'+str(f.relative_to(a.stage)).replace('/','\\')+'"' for f in files]

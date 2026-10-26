@@ -10,7 +10,7 @@
 
 这是 **0.1.0-dev 开发工程**。已开始实现真实的 librime 输入核心，并用固定版本词库做自动验证。
 
-**当前没有 Windows、Android 或 iPhone 正式版。** 已新增 Windows x64 的 `0.1.0-dev.1` 原生 TSF 开发测试包构建入口；全局注册、安装卸载和真实应用输入仍待管理员授权后实测，不能作为日用版验收。`core/build/ime-core` 仍是开发诊断程序。验证范围见 [Windows 接续记录](docs/WINDOWS-DEV.md)。
+**当前没有 Windows、Android 或 iPhone 正式版。** Windows x64 已有原生 TSF 开发测试包；维护者报告正在使用 `0.1.0-dev.1` 进行真实输入。本次 `0.1.0-dev.2` 优化候选窗与外观设置；完整的跨应用、安装升级卸载及多屏验收仍未完成，不能作为稳定日用版验收。`core/build/ime-core` 仍是开发诊断程序。验证范围见 [Windows 接续记录](docs/WINDOWS-DEV.md) 和 [本次 UI 记录](docs/UI-DEV2.md)。
 
 | 能力 | 当前状态 |
 | --- | --- |
@@ -19,12 +19,12 @@
 | 原生 C++ / librime 核心 | 已实现；当前 Linux 构建 42 项集成检查通过 |
 | 五笔 86 与简体拼音候选、提交 | 已实现；具体证据以 `tests/results-core.json` 为准 |
 | 默认不学习与配置保护 | 本轮功能与反例检查通过；原两项绕过及相邻缓存入口已独立复核 |
-| Windows 系统输入法 / 安装包 | TSF、候选窗、引擎进程、设置与 NSIS 测试包源码已实现并编译；系统安装和跨应用输入未验收 |
+| Windows 系统输入法 / 安装包 | 已交付 dev.1 测试包并收到真实输入试用反馈；dev.2 改进原生 UI，代表应用矩阵尚未验收 |
 | Android / iOS 原生键盘 | 后续阶段 |
 | 九宫格、成熟整句纠错、本地自定义短语 | 后续阶段，不属于当前核心已验证功能 |
 | GitHub 官方仓库 | 已创建公开仓库 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)；当前为 `0.1.0-dev` 源码开发阶段 |
 
-远程源码以官方仓库 `main` 的实际内容为准；CI 结果以 [GitHub Actions](https://github.com/fengyuan0601-prog/yanvy-ime/actions) 的实际运行记录为准。上面的42项是本地 Linux 检查结果，不代表 GitHub CI 已通过。
+远程源码以官方仓库 `main` 的实际内容为准；CI 结果以 [GitHub Actions](https://github.com/fengyuan0601-prog/yanvy-ime/actions) 的实际运行记录为准。上面的42项来自原始 Linux 报告；GitHub Linux/Windows CI 的通过记录和实际边界另见发布与 Windows 接续记录。
 
 五笔 86 是当前开发默认，不代表已经确认所有用户的五笔版本。五笔 98、新世纪方案按后续需求与许可核查分别加入。
 
@@ -91,7 +91,7 @@ quit
 
 ## 下一批工作
 
-从已有核心继续实现 Windows TSF 接入与候选窗，验证记事本、浏览器、微信、Office/WPS 中的输入、取消组合、切换焦点、快捷键和不同 DPI；随后制作安装卸载流程。不要用网页输入框或诊断 CLI 代替系统输入法交付。
+继续验证已有 Windows TSF 和安装包在记事本、浏览器、微信、Office/WPS 中的输入、取消组合、切换焦点、快捷键、不同 DPI，以及升级卸载行为。不要用网页输入框或诊断 CLI 代替系统输入法交付。
 
 完整任务在 [开发交接](docs/CODEX-HANDOFF.md)。
 

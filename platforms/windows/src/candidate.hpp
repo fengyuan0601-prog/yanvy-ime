@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #pragma once
 #include "common.hpp"
+#include "candidate_view.hpp"
 #include <functional>
 namespace yanvy {
 class CandidateWindow {
@@ -12,12 +13,15 @@ class CandidateWindow {
  private:
   static LRESULT CALLBACK Proc(HWND window, UINT message, WPARAM wp, LPARAM lp);
   void Paint();
+  void Place(UINT dpi);
   HWND window_ = nullptr;
   HINSTANCE module_ = nullptr;
-  HFONT font_ = nullptr, small_ = nullptr;
   Response state_{};
-  bool pinyin_ = false, ascii_ = false, dark_ = false;
-  int pad_ = 12, row_ = 32, header_ = 38, preedit_ = 30, footer_ = 28;
+  bool pinyin_ = false, ascii_ = false;
+  int hover_ = -1;
+  RECT caret_{};
+  Appearance appearance_{};
+  CandidateView view_;
   std::function<void(int)> select_;
 };
 }
