@@ -64,6 +64,12 @@ def main():
         check("pinyin_two_character_phrase", pinyin[3]["candidates"][0] == "中国")
         check("pinyin_backspace", pinyin[4]["input"] == "zhonggu")
 
+        for schema,keys in (("double_pinyin_flypy","nihc"),("double_pinyin","nihk"),("double_pinyin_mspy","nihk")):
+            double=run(["schema "+schema,"keys "+keys,"key space","keys "+keys,"key escape"])
+            check(schema+"_real_candidates",double[1]["candidates"][0]=="你好")
+            check(schema+"_commits_once",double[2]["commit"]=="你好" and not double[2]["input"])
+            check(schema+"_cancels_without_commit",not double[4]["input"] and not double[4]["commit"])
+
         switch = run(["schema pinyin_simp", "keys nihao", "schema wubi86", "state"])
         check("schema_switch_cancels_pending_text", not switch[2]["input"] and not switch[2]["commit"])
         reject = subprocess.run([str(binary), str(shared), str(user)], input="schema untrusted\nquit\n",
@@ -118,6 +124,9 @@ def main():
             target.write_text(text.replace(old, new, 1))
 
         attack("learning_patch", lambda p: replace_file(p, "pinyin_simp.custom.yaml", "enable_user_dict: false", "enable_user_dict: true"), immutable=True)
+        for schema in ("double_pinyin_flypy","double_pinyin","double_pinyin_mspy"):
+            attack(schema+"_learning_patch",lambda p,s=schema:replace_file(p,s+".custom.yaml","enable_user_dict: false","enable_user_dict: true"),immutable=True)
+            attack(schema+"_compiled_learning",lambda p,s=schema:replace_file(p,"build/"+s+".schema.yaml","enable_user_dict: false","enable_user_dict: true"),immutable=True)
 
         alias_patch = "\n  engine/translators: [punct_translator, reverse_lookup_translator, table_translator@remember]\n  remember: {dictionary: wubi86, enable_user_dict: true, enable_encoder: true, encode_commit_history: true}\n"
         attack("named_translator_source", lambda p: (p / "wubi86.custom.yaml").write_text((p / "wubi86.custom.yaml").read_text() + alias_patch), immutable=True)

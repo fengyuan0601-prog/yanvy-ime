@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
+"""Run the actual NSIS flow with synthetic callbacks and an isolated HKCU key.
+
+This is not a system install/uninstall or TSF compatibility test. Every file
+stays in a new fixture directory; no production registration or broker call.
+"""
+import argparse
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
+import uuid
+import winreg
+
+ROOT=Path(__file__).resolve().parents[1]
+PRODUCT_KEY=r'Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev'
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--fixture-binary',type=Path,required=True)
+    parser.add_argument('--makensis',type=Path,required=True)
+    parser.add_argument('--temp-dir',type=Path,required=True)
+    a=parser.parse_args()
+    base=a.temp_dir.resolve()/('yanvy-transaction-'+uuid.uuid4().hex)
+    assert base.is_relative_to(a.temp_dir.resolve()) and not base.exists()
+    base.mkdir(parents=True)
+    for scenario in ('check-failure','registration-failure','success'):
+        root=base/scenario;stage=root/'stage';old=root/'old';new=root/'new';stage.mkdir(parents=True);old.mkdir()
+        key_path='Software\\YANVY-Installer-Fixture\\'+uuid.uuid4().hex
+        def read_key(name):
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:return winreg.QueryValueEx(key,name)[0]
+        for folder in (stage,old):
+            for name in ('YANVY-Server.exe','YANVY-Setup.exe','YANVY-Settings.exe','Uninstall.exe'):shutil.copy2(a.fixture_binary,folder/name)
+            (folder/'YANVY-INSTALL-MARKER.txt').write_text('YANVY fixture\n')
+        (stage/'TESTING.txt').write_text('Synthetic NSIS transaction fixture only.\n')
+        (old/'settings.ini').write_text('[display]\nfont_size=23\ntheme=2\nunknown=preserve-only-in-old\n',encoding='ascii')
+        if scenario=='check-failure':(stage/'check-result.txt').write_text('1')
+        if scenario=='registration-failure':(stage/'register-result.txt').write_text('1')
+        (root/'stage-version.nsh').write_text('!define YANVY_VERSION "0.1.0-rc.1"\n!define YANVY_WINDOWS_VERSION "0.1.0.3"\n')
+        (root/'stage-uninstall.nsh').write_text('\n'.join('Delete /REBOOTOK "$INSTDIR\\'+p.name+'"' for p in stage.iterdir())+'\n')
+        source=(ROOT/'platforms/windows/installer/yanvy.nsi').read_text(encoding='utf-8-sig')
+        assert PRODUCT_KEY in source
+        source=source.replace(PRODUCT_KEY,key_path).replace(' HKLM ',' HKCU ')
+        source=source.replace('$SMPROGRAMS',str(root/'shortcuts'))
+        icon=str(ROOT/'assets/brand/yanvy.ico')
+        source=source.replace('..\\..\\..\\assets\\brand\\yanvy.ico',icon)
+        script=root/'transaction.nsi';script.write_text(source,encoding='utf-8-sig')
+        assert PRODUCT_KEY not in source and ' HKLM ' not in source and '$SMPROGRAMS' not in source
+        installer=root/'transaction.exe'
+        subprocess.run([str(a.makensis),'/V2',f'/DSTAGE={stage}',f'/DOUTPUT={installer}',str(script)],check=True,timeout=30)
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_WRITE|winreg.KEY_WOW64_64KEY) as key:
+            winreg.SetValueEx(key,'InstallLocation',0,winreg.REG_SZ,str(old));winreg.SetValueEx(key,'DisplayVersion',0,winreg.REG_SZ,'fixture-old')
+        env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
+        result=subprocess.run([str(installer),'/S',f'/D={new}'],env=env,timeout=30)
+        expected=20 if scenario=='check-failure' else 30 if scenario=='registration-failure' else 0
+        assert result.returncode==expected,(scenario,result.returncode)
+        old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
+        if scenario=='check-failure':
+            assert not old_trace and read_key('InstallLocation')==str(old)
+            assert not (new/'YANVY-Setup.exe').exists()
+        elif scenario=='registration-failure':
+            assert old_trace=='register\n' and read_key('InstallLocation')==str(old)
+            assert read_key('DisplayVersion')=='fixture-old'
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'
+        else:
+            assert not old_trace and read_key('InstallLocation')==str(new)
+            text=(new/'settings.ini').read_bytes()
+            decoded=text.decode('utf-16') if text.startswith(b'\xff\xfe') else text.decode('utf-8-sig')
+            assert 'font_size=23' in decoded and 'theme=2' in decoded and 'unknown=' not in decoded
+            (new/'keep.txt').write_text('must survive exact-file removal')
+            removed=subprocess.run([str(new/'Uninstall-core.exe'),'/S',f'_?={new}'],env=env,timeout=30)
+            assert removed.returncode in (0,3010)
+            for _ in range(50):
+                if not (new/'YANVY-Setup.exe').exists():break
+                time.sleep(.1)
+            assert (new/'keep.txt').read_text()=='must survive exact-file removal'
+            assert (new/'settings.ini').exists() and not (new/'YANVY-Setup.exe').exists()
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\nstop\n'
+            try:read_key('InstallLocation')
+            except FileNotFoundError:pass
+            else:raise AssertionError('fixture uninstall key was not removed')
+        assert (old/'settings.ini').read_text().endswith('unknown=preserve-only-in-old\n')
+        try:winreg.DeleteKeyEx(winreg.HKEY_CURRENT_USER,key_path,winreg.KEY_WOW64_64KEY)
+        except FileNotFoundError:pass
+        print(scenario+': PASS (isolated callback/registry fixture)')
+    print('Fixture evidence retained at '+str(base))
+
+if __name__=='__main__':main()

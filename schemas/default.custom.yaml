@@ -4,6 +4,9 @@ patch:
   schema_list:
     - schema: wubi86
     - schema: pinyin_simp
+    - schema: double_pinyin_flypy
+    - schema: double_pinyin
+    - schema: double_pinyin_mspy
   switcher/save_options: []
   switcher/fix_schema_list_order: true
   menu/page_size: 5

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     "rime-wubi": ["wubi86.schema.yaml", "wubi86.dict.yaml"],
     "rime-pinyin-simp": ["pinyin_simp.schema.yaml", "pinyin_simp.dict.yaml"],
+    "rime-double-pinyin": ["double_pinyin_flypy.schema.yaml", "double_pinyin.schema.yaml", "double_pinyin_mspy.schema.yaml"],
     "rime-stroke": ["stroke.schema.yaml", "stroke.dict.yaml"],
     "rime-prelude": ["default.yaml", "symbols.yaml", "punctuation.yaml", "key_bindings.yaml"],
 }

@@ -1,14 +1,15 @@
 #include <windows.h>
-#ifdef YANVY_REQUIRE_ADMIN
-1 24 "@YANVY_ADMIN_MANIFEST@"
+#ifdef YANVY_INSTALLER_UI
+1 24 "@YANVY_INSTALLER_MANIFEST@"
+102 RCDATA "@YANVY_TESTING_FILE@"
 #endif
 #ifdef YANVY_SETTINGS_UI
 1 24 "@YANVY_SETTINGS_MANIFEST@"
 #endif
 1 ICON "@YANVY_ICON@"
 1 VERSIONINFO
-FILEVERSION 0,1,0,2
-PRODUCTVERSION 0,1,0,2
+FILEVERSION @YANVY_WINDOWS_RC_VERSION@
+PRODUCTVERSION @YANVY_WINDOWS_RC_VERSION@
 FILEFLAGSMASK 0x3fL
 FILEFLAGS VS_FF_PRERELEASE
 FILEOS VOS_NT_WINDOWS32
@@ -19,10 +20,10 @@ BEGIN
     BLOCK "040904b0"
     BEGIN
       VALUE "CompanyName", "IDEORIN / fengyuan0601-prog\0"
-      VALUE "FileDescription", "YANVY 0.1.0-dev Windows test build\0"
-      VALUE "FileVersion", "0.1.0-dev.2\0"
+      VALUE "FileDescription", "YANVY Windows x64\0"
+      VALUE "FileVersion", "@YANVY_VERSION@\0"
       VALUE "ProductName", "YANVY\0"
-      VALUE "ProductVersion", "0.1.0-dev.2\0"
+      VALUE "ProductVersion", "@YANVY_VERSION@\0"
     END
   END
   BLOCK "VarFileInfo"

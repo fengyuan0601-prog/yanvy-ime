@@ -4,7 +4,7 @@
 #include <cstdint>
 
 namespace yanvy {
-constexpr uint32_t kMagic = 0x59564e59, kProtocol = 1;
+constexpr uint32_t kMagic = 0x59564e59, kProtocol = 2;
 enum class Op : uint32_t { Focus = 1, Key, Clear, State };
 // Fixed-width, pointer-free local IPC; identical in 32- and 64-bit clients.
 struct Request {

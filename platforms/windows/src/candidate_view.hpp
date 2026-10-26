@@ -10,10 +10,11 @@ class CandidateView {
   CandidateView()=default;
   CandidateView(const CandidateView&)=delete;
   CandidateView& operator=(const CandidateView&)=delete;
-  void Set(const Response& state,bool pinyin,bool ascii,Appearance appearance,UINT dpi,HICON icon=nullptr);
+  void Set(const Response& state,uint32_t schema,bool ascii,Appearance appearance,UINT dpi,HICON icon=nullptr);
   SIZE Measure(HDC dc,int maximum_width);
   void Draw(HDC dc,RECT bounds,int hover=-1);
   int HitTest(POINT point,RECT bounds) const;
+  bool HitSchema(POINT point,RECT bounds) const;
   bool Dark() const { return dark_; }
  private:
   int D(int dip) const { return MulDiv(dip,int(dpi_),96); }
@@ -22,7 +23,8 @@ class CandidateView {
   void ClearFonts();
   HFONT primary_=nullptr,strong_=nullptr,caption_=nullptr,small_=nullptr;
   Response state_{};
-  bool pinyin_=false,ascii_=false,dark_=false,has_code_=false;
+  uint32_t schema_=1;
+  bool ascii_=false,dark_=false,has_code_=false;
   UINT dpi_=0;
   int font_size_=0;
   HICON icon_=nullptr;

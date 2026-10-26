@@ -48,6 +48,8 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (!manager) return E_INVALIDARG;
     if (manager_) return E_UNEXPECTED;
     manager_ = manager; client_ = id;
+    schema_=preferred_schema_=yanvy::ReadSchemaPreference(yanvy::ModuleDir(module));
+    last_pinyin_schema_=schema_?schema_:yanvy::ReadPinyinSchemaPreference(yanvy::ModuleDir(module));
     ComPtr<ITfKeystrokeMgr> keys;
     ComPtr<ITfSource> source;
     HRESULT hr = manager_->QueryInterface(IID_PPV_ARGS(&keys));
@@ -79,14 +81,14 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (!foreground) Cancel();
     return S_OK;
   }
-  HRESULT STDMETHODCALLTYPE OnSetThreadFocus() override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnSetThreadFocus() override { RefreshPreference();return S_OK; }
   HRESULT STDMETHODCALLTYPE OnKillThreadFocus() override { Cancel(); return S_OK; }
   HRESULT STDMETHODCALLTYPE OnInitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
   HRESULT STDMETHODCALLTYPE OnUninitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
   HRESULT STDMETHODCALLTYPE OnPushContext(ITfContext*) override { Cancel(); return S_OK; }
   HRESULT STDMETHODCALLTYPE OnPopContext(ITfContext*) override { Cancel(); return S_OK; }
   HRESULT STDMETHODCALLTYPE OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) override {
-    Cancel(); Bind(focus); return S_OK;
+    Cancel(); Bind(focus);RefreshPreference();return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnTestKeyDown(ITfContext* context, WPARAM key, LPARAM, BOOL* eaten) override {
     if (!eaten) return E_POINTER;
@@ -97,12 +99,14 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     *eaten = FALSE;
     if (!Interested(context,key)) return S_OK;
     try {
+      RefreshPreference();
       if (context_.Get() != context) { Cancel(); BindContext(context); }
       if (key == VK_SPACE && Down(VK_CONTROL)) {
         Cancel(); ascii_ = !ascii_; Show(true); *eaten = TRUE; return S_OK;
       }
       if (key == VK_F12 && Down(VK_CONTROL) && Down(VK_SHIFT)) {
-        Cancel(); pinyin_ = !pinyin_; Show(true); *eaten = TRUE; return S_OK;
+        Cancel();if(schema_){last_pinyin_schema_=schema_;schema_=0;}else schema_=last_pinyin_schema_;
+        Show(true); *eaten = TRUE; return S_OK;
       }
       yanvy::Response state;
       if (!EnsureFocus()) return S_OK;
@@ -223,7 +227,12 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     return n == 1 ? uint32_t(text[0]) : 0;
   }
   yanvy::Request Request(yanvy::Op op) const {
-    yanvy::Request q; q.owner = owner_; q.op = op; q.schema = pinyin_; return q;
+    yanvy::Request q; q.owner = owner_; q.op = op; q.schema = schema_; return q;
+  }
+  void RefreshPreference(){
+    auto preference=yanvy::ReadSchemaPreference(yanvy::ModuleDir(module));
+    last_pinyin_schema_=yanvy::ReadPinyinSchemaPreference(yanvy::ModuleDir(module));
+    if(preference!=preferred_schema_){Cancel();schema_=preferred_schema_=preference;if(schema_)last_pinyin_schema_=schema_;}
   }
   bool EnsureFocus() {
     if (active_) return true;
@@ -370,7 +379,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
         MapWindowPoints(info.hwndCaret,nullptr,reinterpret_cast<POINT*>(&caret_),2);
       } else { candidates_.Hide(); return; }
     }
-    candidates_.Update(module,yanvy::ModuleDir(module),last_,pinyin_,ascii_,caret_,transient,[this](int index) {
+    candidates_.Update(module,yanvy::ModuleDir(module),last_,schema_,ascii_,caret_,transient,[this](int index) {
       if (!context_ || !active_) return;
       ComPtr<ITfContextView> view; HWND window=nullptr;
       if (FAILED(context_->GetActiveView(&view)) || FAILED(view->GetWnd(&window)) ||
@@ -378,7 +387,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       auto q = Request(yanvy::Op::Key); q.key = uint32_t('1'+index);
       yanvy::Response r;
       if (yanvy::Call(q,r)) Apply(context_.Get(),r); else Cancel();
-    });
+    },[]{yanvy::OpenSettings(yanvy::ModuleDir(module));});
   }
   LONG refs_ = 1;
   TfClientId client_ = TF_CLIENTID_NULL;
@@ -388,7 +397,8 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   ComPtr<ITfComposition> composition_;
   GUID owner_{};
   uint64_t generation_ = 0;
-  bool pinyin_=false,ascii_=false,active_=false,applying_=false;
+  uint32_t schema_=1,preferred_schema_=1,last_pinyin_schema_=1;
+  bool ascii_=false,active_=false,applying_=false;
   RECT caret_{};
   yanvy::Response last_{};
   yanvy::CandidateWindow candidates_;

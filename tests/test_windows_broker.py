@@ -50,7 +50,7 @@ def main():
     assert a.ConvertSidToStringSidW(c.cast(data, c.POINTER(c.c_void_p))[0], c.byref(sid))
     session = w.DWORD()
     assert k.ProcessIdToSessionId(os.getpid(), c.byref(session))
-    pipe = rf"\\.\pipe\YANVY-dev1-{sid.value}-{session.value}"
+    pipe = rf"\\.\pipe\YANVY-v2-{sid.value}-{session.value}"
     k.LocalFree(sid)
     k.CloseHandle(token)
     checks = []
@@ -60,7 +60,7 @@ def main():
             raise AssertionError(name)
         checks.append({"name": name, "status": "PASS"})
 
-    def call(owner, op, key=0, schema=0, raw_version=1):
+    def call(owner, op, key=0, schema=0, raw_version=2):
         q = Request(MAGIC, raw_version, op, key, 0, schema, (c.c_ubyte * 16).from_buffer_copy(owner.bytes_le))
         handle = w.HANDLE(-1).value
         for _ in range(100):
@@ -108,6 +108,12 @@ def main():
         call(two, 2, ord(key))
     r = call(two, 1, schema=0)
     check("schema_switch_cancels_pending_text", not r.input and not r.commit)
+    for schema,keys in ((2,"nihc"),(3,"nihk"),(4,"nihk")):
+        check(f"double_pinyin_{schema}_focus_is_empty",not call(two,1,schema=schema).input)
+        for key in keys:r=call(two,2,ord(key),schema=schema)
+        check(f"double_pinyin_{schema}_real_candidates",r.candidates[0].value=="你好")
+        check(f"double_pinyin_{schema}_space_commit",call(two,2,32,schema=schema).commit=="你好")
+    call(two,1,schema=0)
     for _ in range(10):
         for key in "wqvb":
             call(two, 2, ord(key))

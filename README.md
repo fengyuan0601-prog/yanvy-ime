@@ -10,16 +10,16 @@
 
 这是 **0.1.0-dev 开发工程**。已开始实现真实的 librime 输入核心，并用固定版本词库做自动验证。
 
-**当前没有 Windows、Android 或 iPhone 正式版。** Windows x64 已有原生 TSF 开发测试包；维护者报告正在使用 `0.1.0-dev.1` 进行真实输入。本次 `0.1.0-dev.2` 优化候选窗与外观设置；完整的跨应用、安装升级卸载及多屏验收仍未完成，不能作为稳定日用版验收。`core/build/ime-core` 仍是开发诊断程序。验证范围见 [Windows 接续记录](docs/WINDOWS-DEV.md) 和 [本次 UI 记录](docs/UI-DEV2.md)。
+**当前没有 Windows、Android 或 iPhone 正式版。** Windows x64 已有原生 TSF 测试包并收到维护者真实输入反馈。当前候选版为 `0.1.0-rc.1`：重做安装器与分类设置，支持五笔86、全拼、小鹤双拼、自然码双拼、微软双拼。完整的跨应用、实际升级卸载及多屏验收仍未完成，不能作为稳定日用版验收。`core/build/ime-core` 仍是开发诊断程序。详见 [候选版验收记录](docs/RC1-READINESS.md)。
 
 | 能力 | 当前状态 |
 | --- | --- |
 | 工作名称与图标 | 已制作；名称仍需正式发行前复核 |
 | 产品规划与开发路线 | 见 `docs/PRD.md`、`docs/ROADMAP.md` |
 | 原生 C++ / librime 核心 | 已实现；当前 Linux 构建 42 项集成检查通过 |
-| 五笔 86 与简体拼音候选、提交 | 已实现；具体证据以 `tests/results-core.json` 为准 |
+| 五笔86、全拼与三种双拼候选、提交 | 已实现；新 Windows 核心 65 PASS、1 SKIP，原始 Linux 报告另行保留 |
 | 默认不学习与配置保护 | 本轮功能与反例检查通过；原两项绕过及相邻缓存入口已独立复核 |
-| Windows 系统输入法 / 安装包 | 已交付 dev.1 测试包并收到真实输入试用反馈；dev.2 改进原生 UI，代表应用矩阵尚未验收 |
+| Windows 系统输入法 / 安装包 | dev.1/dev.2 已交付；rc.1 重做安装向导与方案选择，代表应用矩阵尚未验收 |
 | Android / iOS 原生键盘 | 后续阶段 |
 | 九宫格、成熟整句纠错、本地自定义短语 | 后续阶段，不属于当前核心已验证功能 |
 | GitHub 官方仓库 | 已创建公开仓库 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)；当前为 `0.1.0-dev` 源码开发阶段 |

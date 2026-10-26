@@ -4,6 +4,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include "input_schemas.hpp"
 #include <sddl.h>
 #include <string>
 #include <filesystem>
@@ -33,6 +34,18 @@ inline std::filesystem::path ModuleDir(HMODULE module = nullptr) {
   path.resize(n);
   return std::filesystem::path(path).parent_path();
 }
+inline uint32_t ReadSchemaPreference(const std::filesystem::path& root) {
+  UINT value=GetPrivateProfileIntW(L"input",L"schema",1,(root/L"settings.ini").c_str());
+  return value<ime::kSchemaCount?value:1;
+}
+inline uint32_t ReadPinyinSchemaPreference(const std::filesystem::path& root) {
+  UINT value=GetPrivateProfileIntW(L"input",L"pinyin_schema",1,(root/L"settings.ini").c_str());
+  return value>0&&value<ime::kSchemaCount?value:1;
+}
+inline uint32_t ReadDoubleSchemaPreference(const std::filesystem::path& root) {
+  UINT value=GetPrivateProfileIntW(L"input",L"double_schema",2,(root/L"settings.ini").c_str());
+  return value>=2&&value<ime::kSchemaCount?value:2;
+}
 inline std::wstring UserSid() {
   HANDLE token = nullptr;
   if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return {};
@@ -51,7 +64,7 @@ inline std::wstring UserSid() {
 inline std::wstring ObjectName(const wchar_t* prefix) {
   DWORD session = 0;
   ProcessIdToSessionId(GetCurrentProcessId(), &session);
-  return std::wstring(prefix) + L"YANVY-dev1-" + UserSid() + L"-" + std::to_wstring(session);
+  return std::wstring(prefix) + L"YANVY-v2-" + UserSid() + L"-" + std::to_wstring(session);
 }
 inline std::wstring PipeName() { return ObjectName(L"\\\\.\\pipe\\"); }
 // Bound both the connection and each IO operation. A failed engine never
@@ -102,6 +115,13 @@ inline void StartBroker(const std::filesystem::path& root) {
                      nullptr, root.c_str(), &si, &pi)) {
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
+  }
+}
+inline void OpenSettings(const std::filesystem::path& root) {
+  auto executable=root/L"YANVY-Settings.exe";std::wstring command=L"\""+executable.wstring()+L"\"";
+  STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
+  if(CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,root.c_str(),&start,&process)){
+    CloseHandle(process.hThread);CloseHandle(process.hProcess);
   }
 }
 }

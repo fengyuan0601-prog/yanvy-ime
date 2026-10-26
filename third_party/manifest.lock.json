@@ -76,6 +76,20 @@
         "README.md": "211c460310f0d2a9b918b785af959694878c54a8ab88d787a14b99b28ff04f43",
         "picosha2.h": "b13c180161ffac8d0adc81e033e493c409457c4d1258ab9781ac80579ba3bdd8"
       }
+    },
+    {
+      "name": "rime-double-pinyin",
+      "repository": "https://github.com/rime/rime-double-pinyin",
+      "commit": "01a13287cbd27819be1c34fa1ddc1b3643d5001b",
+      "license_file": "rime-double-pinyin/LICENSE",
+      "files": {
+        "AUTHORS": "2054d01e692dd893d63667f2d873e7742af3df834b59a74ad1b6a22f5439647d",
+        "LICENSE": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+        "README.md": "7525aee9fcac14f81fbbe1453f75539fac4735ec1d20d66b41a99e8b1f857d8b",
+        "double_pinyin.schema.yaml": "763430a99d0cd693805766b49d60b9092bc2af0ca26eb107f1d044566ce765d3",
+        "double_pinyin_flypy.schema.yaml": "6b522a7e9cb743474287a14678597460bd124369f32573dd63e8f04e7c41d4b9",
+        "double_pinyin_mspy.schema.yaml": "c72dc607000b39795ab267f80ec8727c6551015579b735a839f198422a75d7a2"
+      }
     }
   ],
   "verification_environment_packages": [

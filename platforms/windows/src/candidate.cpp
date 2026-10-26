@@ -6,20 +6,20 @@
 namespace yanvy {
 CandidateWindow::~CandidateWindow(){
   if(window_)DestroyWindow(window_);
-  if(module_)UnregisterClassW(L"YANVY.Candidates.dev2",module_);
+  if(module_)UnregisterClassW(L"YANVY.Candidates.rc1",module_);
 }
 void CandidateWindow::Hide(){
   hover_=-1;
   if(window_){KillTimer(window_,1);ShowWindow(window_,SW_HIDE);}
 }
 void CandidateWindow::Update(HINSTANCE module,const std::filesystem::path& root,const Response& state,
-    bool pinyin,bool ascii,RECT caret,bool transient,std::function<void(int)> select){
+    uint32_t schema,bool ascii,RECT caret,bool transient,std::function<void(int)> select,std::function<void()> configure){
   state_=state;SecureZeroMemory(state_.commit,sizeof(state_.commit));
-  pinyin_=pinyin;ascii_=ascii;caret_=caret;appearance_=ReadAppearance(root);select_=std::move(select);hover_=-1;
+  schema_=schema;ascii_=ascii;caret_=caret;appearance_=ReadAppearance(root);select_=std::move(select);configure_=std::move(configure);hover_=-1;
   if(!transient&&!state.input[0]&&!state.preedit[0]){Hide();return;}
   if(!window_){
     module_=module;
-    WNDCLASSW wc{};wc.hInstance=module;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Candidates.dev2";
+    WNDCLASSW wc{};wc.hInstance=module;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Candidates.rc1";
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.style=CS_DROPSHADOW;RegisterClassW(&wc);
     auto old=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     window_=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,wc.lpszClassName,L"言舟候选",
@@ -35,7 +35,7 @@ void CandidateWindow::Place(UINT dpi){
   if(!window_)return;
   auto old_dpi=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   auto icon=static_cast<HICON>(LoadImageW(module_,MAKEINTRESOURCEW(1),IMAGE_ICON,MulDiv(16,int(dpi),96),MulDiv(16,int(dpi),96),LR_SHARED));
-  view_.Set(state_,pinyin_,ascii_,appearance_,dpi,icon);
+  view_.Set(state_,schema_,ascii_,appearance_,dpi,icon);
   MONITORINFO monitor{sizeof(monitor)};
   if(!GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor))
     monitor.rcWork={0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN)};
@@ -76,10 +76,12 @@ LRESULT CALLBACK CandidateWindow::Proc(HWND window,UINT message,WPARAM wp,LPARAM
     if(message==WM_DPICHANGED){self->Place(HIWORD(wp));return 0;}
     if(message==WM_MOUSEMOVE||message==WM_LBUTTONUP){
       RECT bounds{};GetClientRect(window,&bounds);int index=self->view_.HitTest({GET_X_LPARAM(lp),GET_Y_LPARAM(lp)},bounds);
+      bool schema=self->view_.HitSchema({GET_X_LPARAM(lp),GET_Y_LPARAM(lp)},bounds);
+      if(message==WM_LBUTTONUP&&schema){if(self->configure_)self->configure_();return 0;}
       if(message==WM_LBUTTONUP){if(index>=0&&self->select_)self->select_(index);return 0;}
       if(self->hover_!=index){self->hover_=index;InvalidateRect(window,nullptr,FALSE);}
       TRACKMOUSEEVENT track{sizeof(track),TME_LEAVE,window,0};TrackMouseEvent(&track);
-      SetCursor(LoadCursorW(nullptr,index>=0?IDC_HAND:IDC_ARROW));return 0;
+      SetCursor(LoadCursorW(nullptr,index>=0||schema?IDC_HAND:IDC_ARROW));return 0;
     }
     if(message==WM_MOUSELEAVE){self->hover_=-1;InvalidateRect(window,nullptr,FALSE);return 0;}
   }

@@ -7,11 +7,11 @@ void CandidateView::ClearFonts(){
   for(auto font:{primary_,strong_,caption_,small_})if(font)DeleteObject(font);
   primary_=strong_=caption_=small_=nullptr;
 }
-void CandidateView::Set(const Response& state,bool pinyin,bool ascii,Appearance appearance,UINT dpi,HICON icon){
+void CandidateView::Set(const Response& state,uint32_t schema,bool ascii,Appearance appearance,UINT dpi,HICON icon){
   if(!graphics_){Gdiplus::GdiplusStartupInput options;Gdiplus::GdiplusStartup(&graphics_,&options,nullptr);}
   state_=state;SecureZeroMemory(state_.commit,sizeof(state_.commit));
   state_.count=std::min<uint32_t>(state_.count,10);
-  pinyin_=pinyin;ascii_=ascii;dark_=IsDark(appearance);icon_=icon;
+  schema_=schema<ime::kSchemaCount?schema:1;ascii_=ascii;dark_=IsDark(appearance);icon_=icon;
   has_code_=state.input[0]||state.preedit[0];
   int size=std::clamp(appearance.font_size,12,32);dpi=std::max<UINT>(dpi,96);
   if(dpi_!=dpi||font_size_!=size){
@@ -48,7 +48,10 @@ void CandidateView::Draw(HDC dc,RECT bounds,int hover){
   RECT mode{bounds.right-D(40),top+D(11),bounds.right-D(12),top+D(33)};
   Rounded(dc,mode,D(6),ascii_?p.chip:p.selection,ascii_?p.chip:p.selection);
   Label(dc,ascii_?L"英":L"中",mode,small_,ascii_?p.muted:p.accent,DT_CENTER);
-  Label(dc,pinyin_?L"拼音":L"五笔86",{bounds.right-D(112),mode.top,mode.left-D(9),mode.bottom},small_,p.muted,DT_RIGHT);
+  RECT schema_button{bounds.right-D(122),mode.top,mode.left-D(8),mode.bottom};
+  Rounded(dc,schema_button,D(5),p.chip,p.chip);
+  auto schema_text=std::wstring(ime::kSchemaShortLabels[schema_])+L" ▾";
+  Label(dc,schema_text.c_str(),schema_button,small_,p.accent,DT_CENTER);
   if(has_code_){
     RECT code{left+D(15),top+D(39),bounds.right-D(15),top+RowsTop()-D(4)};
     Label(dc,state_.preedit[0]?state_.preedit:state_.input,code,primary_,p.accent);
@@ -81,5 +84,8 @@ int CandidateView::HitTest(POINT point,RECT bounds) const {
   int y=point.y-bounds.top-RowsTop();
   if(point.x<bounds.left+D(8)||point.x>=bounds.right-D(8)||y<0)return -1;
   int index=y/RowHeight();return index<int(state_.count)?index:-1;
+}
+bool CandidateView::HitSchema(POINT point,RECT bounds) const {
+  return point.x>=bounds.right-D(122)&&point.x<bounds.right-D(48)&&point.y>=bounds.top+D(11)&&point.y<bounds.top+D(33);
 }
 }

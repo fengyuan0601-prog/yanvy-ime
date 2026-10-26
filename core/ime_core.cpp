@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #include "ime_core.hpp"
 #include "trusted_inputs.hpp"
+#include "input_schemas.hpp"
 #include "../third_party/picosha2/picosha2.h"
 #include <filesystem>
 #include <fstream>
@@ -60,7 +61,7 @@ void VerifyProfile(const fs::path& shared, const fs::path& user) {
       throw std::runtime_error("Refusing unexpected shared data, configuration, or script.");
   }
   std::set<std::string> build_names = {"default.yaml"};
-  for (const char* id : {"wubi86", "pinyin_simp", "stroke"})
+  for (const char* id : kDeployedSchemas)
     for (const char* suffix : {".schema.yaml", ".table.bin", ".prism.bin", ".reverse.bin"})
       build_names.insert(std::string(id) + suffix);
   for (const auto& entry : fs::directory_iterator(user)) {
@@ -110,7 +111,7 @@ bool SafeKeyBindings(RimeApi* api, RimeConfig* c) {
     const std::string path = "key_binder/bindings/@" + std::to_string(i) + "/select";
     if (const char* target = api->config_get_cstring(c, path.c_str())) {
       const std::string id = target;
-      if (id != ".next" && id != "wubi86" && id != "pinyin_simp") return false;
+      if (id != ".next" && !ApprovedSchema(id)) return false;
     }
   }
   return true;
@@ -146,13 +147,13 @@ Engine::Engine(const std::string& shared_dir, const std::string& user_dir)
     // consistently rejected instead of silently repaired on one platform.
     if (fs::is_directory(fs::u8path(user_dir_) / "build")) {
       CheckDefaultPolicy();
-      for (const char* id : {"wubi86", "pinyin_simp", "stroke"}) CheckPrivacy(id);
+      for (const char* id : kDeployedSchemas) CheckPrivacy(id);
     }
     if (api_->start_maintenance(True)) api_->join_maintenance_thread();
     CheckDefaultPolicy();
     // Validate before create_session(): an unsafe schema must never get a
     // chance to instantiate a user dictionary, even for the first session.
-    for (const char* id : {"wubi86", "pinyin_simp", "stroke"}) CheckPrivacy(id);
+    for (const char* id : kDeployedSchemas) CheckPrivacy(id);
     session_ = api_->create_session();
     if (!session_) throw std::runtime_error("Rime session creation failed.");
     SelectSchema("wubi86");
@@ -179,12 +180,13 @@ void Engine::CheckPrivacy(const std::string& id) {
   };
   const std::vector<std::string> processors = {"ascii_composer", "recognizer", "key_binder", "speller", "punctuator", "selector", "navigator", "express_editor"};
   const std::vector<std::string> segmentors = {"ascii_segmentor", "matcher", "abc_segmentor", "punct_segmentor", "fallback_segmentor"};
-  const std::vector<std::string> translators = id == "pinyin_simp"
+  const bool pinyin=id=="pinyin_simp"||IsDoublePinyin(id);
+  const std::vector<std::string> translators = pinyin
       ? std::vector<std::string>{"punct_translator", "script_translator", "reverse_lookup_translator"}
       : id == "wubi86" ? std::vector<std::string>{"punct_translator", "reverse_lookup_translator", "table_translator"}
       : std::vector<std::string>{"punct_translator", "table_translator"};
   const std::vector<std::string> dependencies = id == "wubi86" ? std::vector<std::string>{"pinyin_simp"}
-      : id == "pinyin_simp" ? std::vector<std::string>{"stroke"} : std::vector<std::string>{};
+      : pinyin ? std::vector<std::string>{"stroke"} : std::vector<std::string>{};
   const std::string reverse_dictionary = id == "wubi86" ? "pinyin_simp" : "stroke";
   const bool ok = disabled("translator/enable_user_dict") &&
       disabled("translator/enable_encoder") &&
@@ -197,7 +199,7 @@ void Engine::CheckPrivacy(const std::string& id) {
       ListEquals(api_, &config, "engine/filters", {}) &&
       ListEquals(api_, &config, "schema/dependencies", dependencies) &&
       StringEquals(api_, &config, "schema/schema_id", id) &&
-      StringEquals(api_, &config, "translator/dictionary", id) &&
+      StringEquals(api_, &config, "translator/dictionary", IsDoublePinyin(id)?"pinyin_simp":id) &&
       StringEquals(api_, &config, "reverse_lookup/dictionary", reverse_dictionary) &&
       SafeKeyBindings(api_, &config);
   api_->config_close(&config);
@@ -208,11 +210,12 @@ void Engine::CheckDefaultPolicy() {
   RimeConfig config{};
   if (!api_->config_open("default", &config)) throw std::runtime_error("Missing default configuration.");
   Bool fixed_order = False;
-  const bool ok = api_->config_list_size(&config, "schema_list") == 2 &&
-      OnlyKeys(api_, &config, "schema_list/@0", {"schema"}) &&
-      OnlyKeys(api_, &config, "schema_list/@1", {"schema"}) &&
-      StringEquals(api_, &config, "schema_list/@0/schema", "wubi86") &&
-      StringEquals(api_, &config, "schema_list/@1/schema", "pinyin_simp") &&
+  bool schemas_ok=api_->config_list_size(&config,"schema_list")==kSchemaCount;
+  for(uint32_t index=0;index<kSchemaCount;++index){
+    auto path="schema_list/@"+std::to_string(index);
+    schemas_ok=schemas_ok&&OnlyKeys(api_,&config,path,{"schema"})&&StringEquals(api_,&config,path+"/schema",kSchemaIds[index]);
+  }
+  const bool ok = schemas_ok &&
       ListEquals(api_, &config, "switcher/save_options", {}) &&
       api_->config_get_bool(&config, "switcher/fix_schema_list_order", &fixed_order) && fixed_order &&
       OnlyKeys(api_, &config, "", {"__build_info", "ascii_composer", "config_version", "key_binder", "menu", "punctuator", "recognizer", "schema_list", "selector", "switcher"}) &&
@@ -222,7 +225,7 @@ void Engine::CheckDefaultPolicy() {
 }
 
 void Engine::SelectSchema(const std::string& id) {
-  if (id != "wubi86" && id != "pinyin_simp")
+  if (!ApprovedSchema(id))
     throw std::runtime_error("Schema is not in the approved offline set.");
   CheckDefaultPolicy();
   CheckPrivacy(id);

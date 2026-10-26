@@ -74,13 +74,13 @@ int Serve() {
         yanvy::Request q;
         yanvy::Response r;
         if (yanvy::Transfer(pipe, &q, sizeof(q), false, 1000) &&
-            q.magic == yanvy::kMagic && q.version == yanvy::kProtocol && q.schema <= 1) {
+            q.magic == yanvy::kMagic && q.version == yanvy::kProtocol && q.schema < ime::kSchemaCount) {
           try {
             const bool owns = IsEqualGUID(q.owner, owner);
             if (q.op == yanvy::Op::Focus) {
               if (!owns) engine.Clear();
               owner = q.owner;
-              const std::string wanted = q.schema ? "pinyin_simp" : "wubi86";
+              const std::string wanted = ime::kSchemaIds[q.schema];
               if (schema != wanted) { engine.SelectSchema(wanted); schema = wanted; }
               r = Pack(engine.State());
             } else if (q.op == yanvy::Op::Clear) {

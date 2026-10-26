@@ -8,6 +8,7 @@
 | librime 引擎 | BSD-3-Clause；`third_party/librime/LICENSE`；运行库不随本源码包分发 |
 | rime-wubi | 保留上游 LGPL-3.0 许可原文、作者与 commit |
 | rime-pinyin-simp | 保留上游 Apache-2.0 许可原文、作者与 commit |
+| rime-double-pinyin 的小鹤、自然码、微软方案 | 保留上游 GPL-3.0 原文、作者、固定提交与字节；YANVY 的独立策略补丁沿用原创 BSD 许可，不能覆盖原始方案 |
 | rime-prelude、rime-stroke | 保留上游 LGPL-3.0 许可原文、作者与 commit |
 | PicoSHA2 | MIT；`third_party/picosha2/LICENSE`，用于启动前校验固定输入文件的 SHA-256 |
 | 品牌 PNG 与尺寸导出 | 本项目 AI 生成视觉素材；来源、用途和导出记录见 `assets/brand/PROVENANCE.md` |

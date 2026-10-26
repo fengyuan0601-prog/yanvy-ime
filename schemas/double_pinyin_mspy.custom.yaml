@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Additive policy; original double-pinyin schema remains GPL-3.0.
+patch:
+  translator/dictionary: pinyin_simp
+  translator/enable_user_dict: false
+  translator/enable_encoder: false
+  translator/encode_commit_history: false
+  engine/translators: [punct_translator, script_translator, reverse_lookup_translator]
+  engine/filters: []

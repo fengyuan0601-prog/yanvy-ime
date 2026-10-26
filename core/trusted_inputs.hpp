@@ -5,6 +5,9 @@ namespace ime::policy {
 struct Input { const char* name; const char* sha256; };
 inline constexpr Input kShared[] = {
   {"default.yaml", "0628ada16651d56c4cdfcb8e45ddba23d4d585cc8be0580a62c4e077c0bcc141"},
+  {"double_pinyin.schema.yaml", "763430a99d0cd693805766b49d60b9092bc2af0ca26eb107f1d044566ce765d3"},
+  {"double_pinyin_flypy.schema.yaml", "6b522a7e9cb743474287a14678597460bd124369f32573dd63e8f04e7c41d4b9"},
+  {"double_pinyin_mspy.schema.yaml", "c72dc607000b39795ab267f80ec8727c6551015579b735a839f198422a75d7a2"},
   {"key_bindings.yaml", "ee2476598b4cae89068b823868196eb07b5f72007a600814fe5804b39008b3ed"},
   {"pinyin_simp.dict.yaml", "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b"},
   {"pinyin_simp.schema.yaml", "726772190a325ae4bf236915e7d62a23fedd8cf1da8a74370a20f87196c67775"},
@@ -16,7 +19,10 @@ inline constexpr Input kShared[] = {
   {"wubi86.schema.yaml", "cdb5aac1a9aa071552d5fdffdfe5a6618b429b19358b8b1e003130e835d5a166"},
 };
 inline constexpr Input kUser[] = {
-  {"default.custom.yaml", "9739f1280b4dbee86ded823266005abbd83cde69d27bd35de70f3707407a719f"},
+  {"default.custom.yaml", "95c53b1a759e17adfd873c8664e355e0c3710987688504bba1836eff071b01f2"},
+  {"double_pinyin.custom.yaml", "3a0f2264fcd3f0bb74ef3bd632b4000bba83a4267f6dc89b9cee5c854f489cff"},
+  {"double_pinyin_flypy.custom.yaml", "3a0f2264fcd3f0bb74ef3bd632b4000bba83a4267f6dc89b9cee5c854f489cff"},
+  {"double_pinyin_mspy.custom.yaml", "3a0f2264fcd3f0bb74ef3bd632b4000bba83a4267f6dc89b9cee5c854f489cff"},
   {"pinyin_simp.custom.yaml", "c0621284960a1178eea6ce83125259fbe7524517c3a2b702efc410238cb2d477"},
   {"stroke.custom.yaml", "ed90b1f45771de94ce6a8d130091adfe0dbc2cc29a46eab7395798229c7444b5"},
   {"wubi86.custom.yaml", "82262ad9ff05e2adac885d052aa044ed2266aedcafcd467179c920c479d7a952"},

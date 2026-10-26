@@ -8,7 +8,7 @@ class CandidateWindow {
  public:
   ~CandidateWindow();
   void Update(HINSTANCE module, const std::filesystem::path& root, const Response& state,
-              bool pinyin, bool ascii, RECT caret, bool transient, std::function<void(int)> select);
+              uint32_t schema, bool ascii, RECT caret, bool transient, std::function<void(int)> select,std::function<void()> configure);
   void Hide();
  private:
   static LRESULT CALLBACK Proc(HWND window, UINT message, WPARAM wp, LPARAM lp);
@@ -17,11 +17,12 @@ class CandidateWindow {
   HWND window_ = nullptr;
   HINSTANCE module_ = nullptr;
   Response state_{};
-  bool pinyin_ = false, ascii_ = false;
+  uint32_t schema_=1;bool ascii_ = false;
   int hover_ = -1;
   RECT caret_{};
   Appearance appearance_{};
   CandidateView view_;
   std::function<void(int)> select_;
+  std::function<void()> configure_;
 };
 }

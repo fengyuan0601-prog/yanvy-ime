@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: BSD-3-Clause
+#pragma once
+namespace yanvy {
+inline constexpr wchar_t kVersion[] = L"@YANVY_VERSION@";
+inline constexpr wchar_t kDefaultInstall[] = L"E:\\Codex\\Programs\\YANVY\\@YANVY_VERSION@";
+}

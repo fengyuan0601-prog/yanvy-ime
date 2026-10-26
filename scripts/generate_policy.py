@@ -38,7 +38,7 @@ def main():
     target = ROOT / "core/trusted_inputs.hpp"
     text = expected_header()
     if args.update:
-        target.write_text(text)
+        target.write_text(text,encoding="utf-8",newline="\n")
         print("Updated compiled trust policy; rebuild and rerun adversarial tests.")
     elif not target.exists() or target.read_text() != text:
         raise SystemExit("Trust policy differs from source. Review changes before running generate_policy.py --update.")
