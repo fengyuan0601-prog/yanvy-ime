@@ -25,7 +25,7 @@ def main():
     from fetch_windows_sdk import DLL_SHA256
     assert hashlib.sha256(dll.read_bytes()).hexdigest()==DLL_SHA256
     a.stage.mkdir(parents=True,exist_ok=True)
-    for file in ("YANVY-TSF.dll","YANVY-Server.exe","YANVY-Setup.exe","YANVY-Settings.exe"):
+    for file in ("YANVY-TSF.dll","YANVY-Server.exe","YANVY-Setup.exe","YANVY-Settings.exe","Uninstall.exe"):
         shutil.copy2(a.build/file,a.stage/file)
     shutil.copy2(dll,a.stage/"rime.dll")
     stage(a.stage/"data",a.stage/"profile")

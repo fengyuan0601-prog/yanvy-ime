@@ -1,4 +1,4 @@
-; SPDX-License-Identifier: GPL-3.0-or-later
+﻿; SPDX-License-Identifier: GPL-3.0-or-later
 Unicode true
 !include "LogicLib.nsh"
 !include "x64.nsh"
@@ -11,7 +11,9 @@ Unicode true
 Name "言舟 · YANVY 0.1.0-dev.1"
 OutFile "${OUTPUT}"
 InstallDir "E:\Codex\Programs\YANVY\0.1.0-dev.1"
-RequestExecutionLevel admin
+; The public native bootstrap requests UAC, sets E: temp, then launches this
+; internal payload with its elevated token and inherited environment.
+RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetDatablockOptimize on
 BrandingText "IDEORIN · 开发测试版 / 未签名"
@@ -34,10 +36,11 @@ UninstPage instfiles
 Var PreviousDir
 
 Function .onInit
-  ; All installer-owned temporary assets stay on E: when that drive exists.
-  IfFileExists "E:\*.*" 0 +3
-    CreateDirectory "E:\Codex\Temp"
-    StrCpy $TEMP "E:\Codex\Temp"
+  ReadEnvStr $0 "YANVY_SETUP_TEMP_READY"
+  ${If} $0 != "1"
+    MessageBox MB_OK|MB_ICONSTOP "请运行对外提供的 YANVY 安装包入口。此文件是内部安装载荷。"
+    Abort
+  ${EndIf}
   ${IfNot} ${IsNativeAMD64}
     MessageBox MB_OK|MB_ICONSTOP "此测试包只支持 Windows x64，不支持 32 位或 ARM64 Windows。"
     Abort
@@ -72,7 +75,7 @@ Section "言舟 Windows TSF 开发测试"
     MessageBox MB_OK|MB_ICONSTOP "Windows TSF 注册失败。请确认已允许管理员授权；安装程序将回退此次注册。"
     Goto rollback
   ${EndIf}
-  WriteUninstaller "$INSTDIR\Uninstall.exe"
+  WriteUninstaller "$INSTDIR\Uninstall-core.exe"
   CreateDirectory "$SMPROGRAMS\言舟 YANVY 开发测试"
   CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk" "$INSTDIR\YANVY-Settings.exe"
   CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk" "$INSTDIR\YANVY-Server.exe" "--serve"
@@ -103,9 +106,11 @@ Section "言舟 Windows TSF 开发测试"
 SectionEnd
 
 Function un.onInit
-  IfFileExists "E:\*.*" 0 +3
-    CreateDirectory "E:\Codex\Temp"
-    StrCpy $TEMP "E:\Codex\Temp"
+  ReadEnvStr $0 "YANVY_SETUP_TEMP_READY"
+  ${If} $0 != "1"
+    MessageBox MB_OK|MB_ICONSTOP "请运行安装目录的 Uninstall.exe 卸载入口。"
+    Abort
+  ${EndIf}
   SetRegView 64
   SetShellVarContext all
   IfFileExists "$INSTDIR\YANVY-INSTALL-MARKER.txt" +3
@@ -151,5 +156,6 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\言舟 YANVY 开发测试"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev"
   Delete /REBOOTOK "$INSTDIR\Uninstall.exe"
+  Delete /REBOOTOK "$INSTDIR\Uninstall-core.exe"
   RMDir "$INSTDIR"
 SectionEnd

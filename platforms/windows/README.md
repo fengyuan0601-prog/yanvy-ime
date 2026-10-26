@@ -29,10 +29,14 @@ cmake --build build/windows
 
 ```powershell
 python scripts/package_windows.py --build build/windows --rime-sdk E:/Codex/Programs/YANVY-Rime-1.10.0-clang --stage E:/Codex/Temp/yanvy-stage-unique
-E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:/Codex/Temp/yanvy-stage-unique /DOUTPUT=E:/CHATGPT/yanvy-setup.exe platforms/windows/installer/yanvy.nsi
+E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-payload.exe platforms/windows/installer/yanvy.nsi
+cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe
+cmake --build build/windows --target YANVY-Installer
 ```
 
 安装包必须与对应源码、第三方组合源码及许可证一并提供。对应源码包含现有词库原文件，以及该 SDK 的 librime、插件、依赖和构建脚本；保留各自原许可。
+
+对外提供原生 `YANVY-Installer.exe` 入口，不能直接分发内部 NSIS 载荷。原生入口请求正常 UAC，在启动 NSIS 前将 TEMP/TMP 设为 `E:\Codex\Temp`；卸载入口同样处理，安装器临时内容也留在 E 盘。此开发测试包要求目标机器有可写的 E 盘。NSIS 编译参数使用绝对 Windows 反斜线路径。
 
 TSF 全局注册需要正常的 Windows 管理员授权，涉及 Windows 管理的系统注册表。程序、数据和缓存默认安装到 E 盘。不强改默认输入法，不通过全局键盘钩子、剪贴板或模拟粘贴提交文字。安装后先从开始菜单启动引擎，再通过系统输入法切换器选择言舟。
 

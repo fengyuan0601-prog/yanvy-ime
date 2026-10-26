@@ -111,6 +111,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       if (!q.key || !yanvy::Call(q,state)) { Cancel(); return S_OK; }
       if (!Apply(context,state)) { Cancel(); return S_OK; }
       last_ = state;
+      SecureZeroMemory(last_.commit,sizeof(last_.commit));
       // An unhandled key can still finish a composition. Apply that edit
       // before passing the original key on to the application.
       *eaten = state.handled;
@@ -329,6 +330,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       }
       if (SUCCEEDED(result)) {
         last_ = state;
+        SecureZeroMemory(last_.commit,sizeof(last_.commit));
         Position(ec);
       }
       return result;

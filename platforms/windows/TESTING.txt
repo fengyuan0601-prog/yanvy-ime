@@ -1,4 +1,4 @@
-言舟 · YANVY 0.1.0-dev.1 — Windows x64 开发测试版
+﻿言舟 · YANVY 0.1.0-dev.1 — Windows x64 开发测试版
 
 这是首次 Windows 原生 TSF 接入测试包，未签名，不是稳定日用版。
 只支持 Windows 10/11 x64 中的 64 位桌面应用；32 位、ARM64、UWP、

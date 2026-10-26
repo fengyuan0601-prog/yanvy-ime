@@ -5,6 +5,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import subprocess
+import shutil
 import urllib.request
 
 URL = "https://github.com/rime/librime/releases/download/1.10.0/rime-295cb2a-Windows-clang.7z"
@@ -30,7 +31,14 @@ def main():
             raise SystemExit("Use a new SDK directory; existing files are not overwritten.")
     else:
         a.sdk_dir.mkdir(parents=True,exist_ok=True)
-        subprocess.run(["tar","-xf",str(archive),"-C",str(a.sdk_dir)],check=True)
+        extractor=shutil.which("7z") or shutil.which("7za")
+        if extractor:
+            subprocess.run([extractor,"x","-y",f"-o{a.sdk_dir.resolve()}",str(archive.resolve())],check=True,
+                           stdout=subprocess.DEVNULL)
+        else:
+            # Some Windows Server tar builds lack LZMA support. CI supplies
+            # 7-Zip; a workstation may use Windows' newer bundled tar.
+            subprocess.run(["tar","-xf",str(archive),"-C",str(a.sdk_dir)],check=True)
     assert hashlib.sha256((a.sdk_dir/"dist/lib/rime.dll").read_bytes()).hexdigest()==DLL_SHA256
     print(a.sdk_dir.resolve())
 
