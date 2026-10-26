@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #pragma once
 #include "appearance.hpp"
+#include <limits>
 namespace yanvy {
 // One native painter is shared by the TSF popup and the clearly-labelled
 // appearance preview. The preview does not create an input session.
@@ -11,7 +12,7 @@ class CandidateView {
   CandidateView(const CandidateView&)=delete;
   CandidateView& operator=(const CandidateView&)=delete;
   void Set(const Response& state,uint32_t schema,bool ascii,Appearance appearance,UINT dpi,HICON icon=nullptr);
-  SIZE Measure(HDC dc,int maximum_width);
+  SIZE Measure(HDC dc,int maximum_width,int maximum_height=std::numeric_limits<int>::max());
   void Draw(HDC dc,RECT bounds,int hover=-1);
   int HitTest(POINT point,RECT bounds) const;
   bool HitSchema(POINT point,RECT bounds) const;
@@ -20,7 +21,9 @@ class CandidateView {
   int D(int dip) const { return MulDiv(dip,int(dpi_),96); }
   int RowsTop() const;
   int RowHeight() const { return D(std::max(30,font_size_+14)); }
+  int Height() const;
   void ClearFonts();
+  void CreateFonts();
   HFONT primary_=nullptr,strong_=nullptr,caption_=nullptr,small_=nullptr;
   Response state_{};
   uint32_t schema_=1;

@@ -36,6 +36,7 @@ def main():
     k.CreateFileW.restype = w.HANDLE
     k.ReadFile.argtypes = k.WriteFile.argtypes = [w.HANDLE, c.c_void_p, w.DWORD, c.POINTER(w.DWORD), c.c_void_p]
     k.CloseHandle.argtypes = [w.HANDLE]
+    k.WaitNamedPipeW.argtypes = [w.LPCWSTR, w.DWORD]
     k.LocalFree.argtypes = [c.c_void_p]
     a.OpenProcessToken.argtypes = [w.HANDLE, w.DWORD, c.POINTER(w.HANDLE)]
     a.GetTokenInformation.argtypes = [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.POINTER(w.DWORD)]
@@ -82,6 +83,13 @@ def main():
         finally:
             k.CloseHandle(handle)
 
+    # A clean test profile compiles its fixed dictionaries before exposing the
+    # pipe. Bound startup separately; normal requests retain the short timeout.
+    startup_deadline = time.monotonic() + 30
+    while not k.WaitNamedPipeW(pipe, 100):
+        if time.monotonic() >= startup_deadline:
+            raise OSError(c.get_last_error(), "Broker did not become ready within 30 seconds")
+        time.sleep(.05)
     check("cross_arch_protocol_layout", c.sizeof(Request) == 40 and c.sizeof(Response) == 17444)
     one, two = uuid.uuid4(), uuid.uuid4()
     check("first_focus_has_no_old_composition", call(one, 1).input == "")

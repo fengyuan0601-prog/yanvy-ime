@@ -7,6 +7,11 @@ void CandidateView::ClearFonts(){
   for(auto font:{primary_,strong_,caption_,small_})if(font)DeleteObject(font);
   primary_=strong_=caption_=small_=nullptr;
 }
+void CandidateView::CreateFonts(){
+  ClearFonts();
+  primary_=Font(D(font_size_));strong_=Font(D(font_size_),FW_SEMIBOLD);
+  caption_=Font(D(13),FW_MEDIUM);small_=Font(D(11));
+}
 void CandidateView::Set(const Response& state,uint32_t schema,bool ascii,Appearance appearance,UINT dpi,HICON icon){
   if(!graphics_){Gdiplus::GdiplusStartupInput options;Gdiplus::GdiplusStartup(&graphics_,&options,nullptr);}
   state_=state;SecureZeroMemory(state_.commit,sizeof(state_.commit));
@@ -15,15 +20,24 @@ void CandidateView::Set(const Response& state,uint32_t schema,bool ascii,Appeara
   has_code_=state.input[0]||state.preedit[0];
   int size=std::clamp(appearance.font_size,12,32);dpi=std::max<UINT>(dpi,96);
   if(dpi_!=dpi||font_size_!=size){
-    ClearFonts();dpi_=dpi;font_size_=size;
-    primary_=Font(D(size));strong_=Font(D(size),FW_SEMIBOLD);
-    caption_=Font(D(13),FW_MEDIUM);small_=Font(D(11));
+    dpi_=dpi;font_size_=size;CreateFonts();
   }
 }
 int CandidateView::RowsTop() const {
   return D(42)+(has_code_?D(font_size_+14):0)+D(5);
 }
-SIZE CandidateView::Measure(HDC dc,int maximum_width){
+int CandidateView::Height() const {
+  if(state_.count)return RowsTop()+int(state_.count)*RowHeight()+D(35);
+  return has_code_?RowsTop()+D(38):D(100);
+}
+SIZE CandidateView::Measure(HDC dc,int maximum_width,int maximum_height){
+  maximum_width=std::max(1,maximum_width);maximum_height=std::max(1,maximum_height);
+  // Keep the whole page, footer and hit targets visible on a small work area.
+  // A constrained popup uses a smaller rendering scale without changing the
+  // saved font preference. The next Set restores the monitor's requested DPI.
+  UINT requested=dpi_;
+  while(dpi_>1&&(Height()>maximum_height||D(state_.count?264:302)>maximum_width))--dpi_;
+  if(dpi_!=requested)CreateFonts();
   int width=D(state_.count?264:302);
   auto old=SelectObject(dc,strong_);
   for(uint32_t i=0;i<state_.count;++i){
@@ -36,8 +50,7 @@ SIZE CandidateView::Measure(HDC dc,int maximum_width){
   }
   SelectObject(dc,old);
   width=std::min(width,std::min(D(540),maximum_width));
-  int height=state_.count?RowsTop()+int(state_.count)*RowHeight()+D(35):D(100);
-  return {width,height};
+  return {width,std::min(Height(),maximum_height)};
 }
 void CandidateView::Draw(HDC dc,RECT bounds,int hover){
   const auto p=Palette::Get(dark_);const int left=bounds.left,top=bounds.top;
@@ -75,12 +88,15 @@ void CandidateView::Draw(HDC dc,RECT bounds,int hover){
     Label(dc,page.c_str(),{left+D(15),y+D(10),left+D(85),bounds.bottom-D(4)},small_,p.muted);
     Label(dc,(!state_.last_page||state_.page)?L"PgUp / PgDn 翻页":L"空格确认 · 数字选词",
           {left+D(80),y+D(10),bounds.right-D(15),bounds.bottom-D(4)},small_,p.muted,DT_RIGHT);
+  }else if(has_code_){
+    Label(dc,L"暂无候选 · Enter 提交编码",{left+D(15),y,bounds.right-D(15),bounds.bottom-D(6)},small_,p.muted);
   }else{
     Label(dc,L"Ctrl+Space  中英切换",{left+D(15),top+D(44),bounds.right-D(15),top+D(68)},small_,p.muted);
     Label(dc,L"Ctrl+Shift+F12  五笔 / 拼音",{left+D(15),top+D(67),bounds.right-D(15),bounds.bottom-D(9)},small_,p.muted);
   }
 }
 int CandidateView::HitTest(POINT point,RECT bounds) const {
+  if(!PtInRect(&bounds,point))return -1;
   int y=point.y-bounds.top-RowsTop();
   if(point.x<bounds.left+D(8)||point.x>=bounds.right-D(8)||y<0)return -1;
   int index=y/RowHeight();return index<int(state_.count)?index:-1;

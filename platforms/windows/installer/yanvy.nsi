@@ -39,6 +39,7 @@ Var PreviousDir
 Var PreviousVersion
 Var RegistrationAttempted
 Var FailureCode
+Var RemovalFailed
 
 ; Migrate bounded preferences only. Never copy an old Rime
 ; profile, dictionaries, caches or arbitrary keys into the new installation.
@@ -186,20 +187,41 @@ Section "言舟 Windows TSF 开发测试"
     ; Do not unregister the working old version if extraction or validation
     ; failed before attempting registration of the new version.
     ${If} $RegistrationAttempted == 1
+      StrCpy $RemovalFailed 0
+      ClearErrors
       ExecWait '"$INSTDIR\YANVY-Setup.exe" --unregister --machine' $0
+      ${If} ${Errors}
+        StrCpy $RemovalFailed 1
+      ${ElseIf} $0 != 0
+        StrCpy $RemovalFailed 1
+      ${EndIf}
       ${If} $PreviousDir != ""
-        IfFileExists "$PreviousDir\YANVY-Setup.exe" 0 rollback_files
+        IfFileExists "$PreviousDir\YANVY-Setup.exe" 0 rollback_incomplete
+        ClearErrors
         ExecWait '"$PreviousDir\YANVY-Setup.exe" --register --machine' $0
+        IfErrors rollback_incomplete
+        ${If} $0 != 0
+          Goto rollback_incomplete
+        ${EndIf}
+        ; Only claim recovery after the previous registration succeeded. If
+        ; restoration is rejected retain both versions for a deliberate repair.
+        ClearErrors
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "InstallLocation" "$PreviousDir"
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayVersion" "$PreviousVersion"
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayName" "言舟 · YANVY $PreviousVersion"
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "UninstallString" '$\"$PreviousDir\Uninstall.exe$\"'
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayIcon" "$PreviousDir\YANVY-Settings.exe"
+        CreateDirectory "$SMPROGRAMS\言舟 YANVY 开发测试"
         CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk" "$PreviousDir\YANVY-Settings.exe"
         CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk" "$PreviousDir\YANVY-Server.exe" "--serve"
         CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\测试说明.lnk" "$PreviousDir\TESTING.txt"
         CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\卸载.lnk" "$PreviousDir\Uninstall.exe"
+        IfErrors rollback_incomplete
       ${Else}
+        ${If} $RemovalFailed == 1
+          Goto rollback_incomplete
+        ${EndIf}
+        ClearErrors
         DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev"
         Delete "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk"
         Delete "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk"
@@ -208,11 +230,17 @@ Section "言舟 Windows TSF 开发测试"
         RMDir "$SMPROGRAMS\言舟 YANVY 开发测试"
       ${EndIf}
     ${EndIf}
-    rollback_files:
     !include "${STAGE}-uninstall.nsh"
     Delete "$INSTDIR\Uninstall-core.exe"
     RMDir "$INSTDIR"
     SetErrorLevel $FailureCode
+    Abort
+  rollback_incomplete:
+    ; The registered COM path may still refer to this installation. Do not
+    ; remove its DLL/repair tools or report the ordinary recovered failure.
+    SetErrorLevel 31
+    IfSilent +2
+    MessageBox MB_OK|MB_ICONSTOP "安装失败，且 Windows 未完成回退。新旧程序文件已保留，请保留安装目录并报告错误类别 31。"
     Abort
   done:
 SectionEnd

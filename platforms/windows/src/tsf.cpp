@@ -115,8 +115,6 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       q.key = Translate(key, lp, q.modifiers);
       if (!q.key || !yanvy::Call(q,state)) { Cancel(); return S_OK; }
       if (!Apply(context,state)) { Cancel(); return S_OK; }
-      last_ = state;
-      SecureZeroMemory(last_.commit,sizeof(last_.commit));
       // An unhandled key can still finish a composition. Apply that edit
       // before passing the original key on to the application.
       *eaten = state.handled;
@@ -249,15 +247,8 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   HRESULT Edit(ITfContext* context, std::function<HRESULT(TfEditCookie)> function, bool write=true) {
     if (!context || !manager_) return E_FAIL;
-    auto edit = new(std::nothrow) EditSession(static_cast<ITfTextInputProcessorEx*>(this),context,std::move(function));
-    if (!edit) return E_OUTOFMEMORY;
-    HRESULT outcome = E_FAIL;
-    HRESULT hr = context->RequestEditSession(client_,edit,TF_ES_SYNC | (write ? TF_ES_READWRITE : TF_ES_READ),&outcome);
-    if (FAILED(hr) || outcome == TF_E_SYNCHRONOUS || outcome == TS_E_NOLOCK) {
-      hr = context->RequestEditSession(client_,edit,TF_ES_ASYNC | (write ? TF_ES_READWRITE : TF_ES_READ),&outcome);
-    }
-    edit->Release();
-    return FAILED(hr) ? hr : outcome;
+    return RequestOrderedEditSession(static_cast<ITfTextInputProcessorEx*>(this),context,
+        client_,edit_order_,std::move(function),write);
   }
   void Cancel() {
     ++generation_; ClearEngine(); last_ = {}; candidates_.Hide();
@@ -316,8 +307,13 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   bool Apply(ITfContext* context, yanvy::Response state) {
     const auto generation = generation_;
+    const auto revision = ++snapshot_revision_;
+    // Keystroke decisions follow the newest accepted engine response. An
+    // older queued document edit must not roll this snapshot backwards.
+    last_ = state;
+    SecureZeroMemory(last_.commit,sizeof(last_.commit));
     ComPtr<ITfContext> target(context);
-    HRESULT hr = Edit(context,[this,target,state,generation](TfEditCookie ec) {
+    HRESULT hr = Edit(context,[this,target,state,generation,revision](TfEditCookie ec) {
       if (generation != generation_ || target.Get() != context_.Get()) return S_OK;
       applying_ = true;
       struct Reset { bool& flag; ~Reset(){ flag=false; } } reset{applying_};
@@ -339,11 +335,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
         if (SUCCEEDED(finished->GetRange(&range))) range->SetText(ec,0,L"",0);
         composition_.Reset(); result = finished->EndComposition(ec);
       }
-      if (SUCCEEDED(result)) {
-        last_ = state;
-        SecureZeroMemory(last_.commit,sizeof(last_.commit));
-        Position(ec);
-      }
+      if (SUCCEEDED(result) && revision == snapshot_revision_) Position(ec);
       return result;
     });
     return SUCCEEDED(hr);
@@ -388,7 +380,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
           GetAncestor(window,GA_ROOT) != GetForegroundWindow()) { Cancel(); return; }
       auto q = Request(yanvy::Op::Key); q.key = uint32_t('1'+index);
       yanvy::Response r;
-      if (yanvy::Call(q,r)) Apply(context_.Get(),r); else Cancel();
+      if (!yanvy::Call(q,r) || !Apply(context_.Get(),r)) Cancel();
     },[]{yanvy::OpenSettings(yanvy::ModuleDir(module));});
   }
   LONG refs_ = 1;
@@ -399,6 +391,8 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   ComPtr<ITfComposition> composition_;
   GUID owner_{};
   uint64_t generation_ = 0;
+  uint64_t snapshot_revision_ = 0;
+  EditSessionOrder edit_order_;
   uint32_t schema_=1,preferred_schema_=1,last_pinyin_schema_=1;
   std::wstring preference_revision_;
   bool ascii_=false,active_=false,applying_=false;

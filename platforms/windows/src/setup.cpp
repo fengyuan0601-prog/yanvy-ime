@@ -4,6 +4,7 @@
 #include "ids.hpp"
 #include <msctf.h>
 #include "msctf_compat.hpp"
+#include "registration_flow.hpp"
 #include <wrl/client.h>
 #include <iostream>
 #include <algorithm>
@@ -49,29 +50,82 @@ HRESULT Register(bool machine) {
   if (SUCCEEDED(hr)) hr = SetString(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",L"YANVY-dev",
       L"\"" + (yanvy::ModuleDir()/L"YANVY-Server.exe").wstring() + L"\" --serve");
   if (FAILED(hr)) {
-    if (category) for (auto guid : categories) category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
-    if (profiles) profiles->UnregisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,0);
-    RegDeleteTreeW(hive,key.c_str());
+    HRESULT cleanup = profiles ? profiles->UnregisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,0) : S_OK;
+    if (SUCCEEDED(cleanup) && category) for (auto guid : categories) {
+      cleanup = category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
+      if (FAILED(cleanup)) break;
+    }
+    if (SUCCEEDED(cleanup)) RegDeleteTreeW(hive,key.c_str());
   }
   return hr;
 }
+HRESULT FindGuid(IEnumGUID* list, REFGUID expected, bool& found) {
+  found = false;
+  GUID value{}; ULONG fetched = 0;
+  for (;;) {
+    HRESULT hr = list->Next(1,&value,&fetched);
+    if (FAILED(hr)) return hr;
+    if (hr == S_FALSE && fetched == 0) return S_OK;
+    if (fetched != 1) return E_UNEXPECTED;
+    if (value == expected) { found = true; return S_OK; }
+  }
+}
+HRESULT RemovalResult(LSTATUS error) {
+  if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return S_OK;
+  return HRESULT_FROM_WIN32(error);
+}
+struct RegistrationRemoval {
+  bool machine;
+  HRESULT RemoveProfile() {
+    ComPtr<ITfInputProcessorProfiles> profiles;
+    HRESULT hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
+    if (FAILED(hr)) return hr;
+    ComPtr<IEnumGUID> list;
+    hr = profiles->EnumInputProcessorInfo(&list);
+    if (FAILED(hr)) return hr;
+    if (!list) return E_UNEXPECTED;
+    bool present = false;
+    hr = FindGuid(list.Get(),yanvy::kService,present);
+    if (FAILED(hr) || !present) return hr;
+    // Do not disable first: if removal is refused the existing profile must
+    // remain usable. TSF's Unregister operation removes the service itself.
+    return profiles->Unregister(yanvy::kService);
+  }
+  HRESULT RemoveCategories() {
+    ComPtr<ITfCategoryMgr> category;
+    HRESULT hr = CoCreateInstance(CLSID_TF_CategoryMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&category));
+    if (FAILED(hr)) return hr;
+    for (auto guid : categories) {
+      ComPtr<IEnumGUID> list;
+      hr = category->EnumCategoriesInItem(yanvy::kService,&list);
+      if (FAILED(hr)) return hr;
+      if (!list) return E_UNEXPECTED;
+      bool present = false;
+      hr = FindGuid(list.Get(),*guid,present);
+      if (FAILED(hr)) return hr;
+      if (present) {
+        hr = category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
+        if (FAILED(hr)) return hr;
+      }
+    }
+    return S_OK;
+  }
+  HRESULT RemoveComServer() {
+    const std::wstring key = std::wstring(L"Software\\Classes\\CLSID\\") + yanvy::kClsid;
+    return RemovalResult(RegDeleteTreeW(machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,key.c_str()));
+  }
+  HRESULT RemoveStartup() {
+    HKEY run = nullptr;
+    LSTATUS error = RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,KEY_SET_VALUE,&run);
+    if (error != ERROR_SUCCESS) return RemovalResult(error);
+    error = RegDeleteValueW(run,L"YANVY-dev");
+    RegCloseKey(run);
+    return RemovalResult(error);
+  }
+};
 HRESULT Unregister(bool machine) {
-  ComPtr<ITfInputProcessorProfiles> profiles;
-  HRESULT hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
-  if (SUCCEEDED(hr)) {
-    profiles->EnableLanguageProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,FALSE);
-    hr = profiles->Unregister(yanvy::kService);
-  }
-  ComPtr<ITfCategoryMgr> category;
-  if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&category))))
-    for (auto guid : categories) category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
-  const std::wstring key = std::wstring(L"Software\\Classes\\CLSID\\") + yanvy::kClsid;
-  RegDeleteTreeW(machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,key.c_str());
-  HKEY run = nullptr;
-  if (RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,KEY_SET_VALUE,&run) == ERROR_SUCCESS) {
-    RegDeleteValueW(run,L"YANVY-dev"); RegCloseKey(run);
-  }
-  return hr;
+  RegistrationRemoval removal{machine};
+  return yanvy::UnregisterTextService(removal);
 }
 }
 int wmain(int argc, wchar_t** argv) {

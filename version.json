@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-rc.1",
-  "windows_version": "0.1.0.3",
+  "version": "0.1.0-rc.2",
+  "windows_version": "0.1.0.4",
   "channel": "release-candidate"
 }

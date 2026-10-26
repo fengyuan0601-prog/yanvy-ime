@@ -6,7 +6,7 @@
 namespace yanvy {
 CandidateWindow::~CandidateWindow(){
   if(window_)DestroyWindow(window_);
-  if(module_)UnregisterClassW(L"YANVY.Candidates.rc1",module_);
+  if(module_)UnregisterClassW(L"YANVY.Candidates.rc2",module_);
 }
 void CandidateWindow::Hide(){
   hover_=-1;
@@ -19,7 +19,7 @@ void CandidateWindow::Update(HINSTANCE module,const std::filesystem::path& root,
   if(!transient&&!state.input[0]&&!state.preedit[0]){Hide();return;}
   if(!window_){
     module_=module;
-    WNDCLASSW wc{};wc.hInstance=module;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Candidates.rc1";
+    WNDCLASSW wc{};wc.hInstance=module;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Candidates.rc2";
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.style=CS_DROPSHADOW;RegisterClassW(&wc);
     auto old=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     window_=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,wc.lpszClassName,L"言舟候选",
@@ -39,7 +39,7 @@ void CandidateWindow::Place(UINT dpi){
   MONITORINFO monitor{sizeof(monitor)};
   if(!GetMonitorInfoW(MonitorFromRect(&caret_,MONITOR_DEFAULTTONEAREST),&monitor))
     monitor.rcWork={0,0,GetSystemMetrics(SM_CXSCREEN),GetSystemMetrics(SM_CYSCREEN)};
-  HDC dc=GetDC(window_);SIZE size=view_.Measure(dc,int(monitor.rcWork.right-monitor.rcWork.left));ReleaseDC(window_,dc);
+  HDC dc=GetDC(window_);SIZE size=view_.Measure(dc,int(monitor.rcWork.right-monitor.rcWork.left),int(monitor.rcWork.bottom-monitor.rcWork.top));ReleaseDC(window_,dc);
   int x=std::clamp<int>(caret_.left,monitor.rcWork.left,monitor.rcWork.right-size.cx);
   int gap=MulDiv(6,int(dpi),96),y=caret_.bottom+gap;
   if(y+size.cy>monitor.rcWork.bottom)y=caret_.top-size.cy-gap;

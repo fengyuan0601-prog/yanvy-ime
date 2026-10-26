@@ -168,7 +168,8 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(message==WM_TIMER&&v->worker&&WaitForSingleObject(v->worker,0)==WAIT_OBJECT_0){KillTimer(window,1);GetExitCodeProcess(v->worker,&v->result);CloseHandle(v->worker);v->worker=nullptr;
     v->page=(v->result==0||v->result==3010)?2:3;
     v->status=v->page==2?(v->result==3010?L"部分文件将在重启后清理；不会自动重启。":L"任务已完成。"):
-      v->result==10?L"目录已有文件，或不是有效的 E 盘安装位置。":v->result==20?L"词库或文件校验失败，请重新获取安装包。":v->result==30?L"系统注册失败；已尝试恢复之前的版本。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);v->Refresh();return 0;}
+      v->result==10?L"目录已有文件，或不是有效的 E 盘安装位置。":v->result==20?L"词库或文件校验失败，请重新获取安装包。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
+      v->result==31?L"安装失败，回退未完成。新旧程序文件已保留，请保留目录并报告错误类别 31。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);v->Refresh();return 0;}
   if(message==WM_COMMAND){if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){
     case primary_id:if(v->page==2)DestroyWindow(window);else if(v->page!=1)v->Start();return 0;
     case secondary_id:if(v->page!=1)DestroyWindow(window);return 0;
