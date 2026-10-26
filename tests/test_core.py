@@ -85,7 +85,7 @@ def main():
         check("no_input_log_files_created", not any(p.suffix in (".log", ".jsonl") or p.name.startswith(("rime.ime-core", "rime.yanvy")) for p in files))
 
         network_trace = None
-        if shutil.which("strace"):
+        if sys.platform.startswith("linux") and shutil.which("strace"):
             run(["schema pinyin_simp", "keys nihao", "key space"], trace=True)
             trace = (base / "network.trace").read_text()
             # glibc may try the local nscd UNIX socket during process setup.
@@ -94,7 +94,7 @@ def main():
             network_trace = trace.splitlines()
             check("no_ip_networking_observed_during_real_input", "AF_INET" not in trace and not any(token in trace for token in ("sendto(", "sendmsg(", "bind(", "listen(")))
         else:
-            checks.append({"name": "no_ip_networking_observed_during_real_input", "status": "SKIP", "reason": "strace is unavailable"})
+            checks.append({"name": "no_ip_networking_observed_during_real_input", "status": "SKIP", "reason": "Linux strace network syscall tracing is unavailable on this platform"})
 
         def inventory(directory):
             return {str(p.relative_to(directory)): hashlib.sha256(p.read_bytes()).hexdigest()
