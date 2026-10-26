@@ -30,15 +30,15 @@ struct View {
   HINSTANCE instance{};HWND window{},primary{},secondary{},browse{},notes{},settings{},progress{},heading{},status_control{},path_control{};
   HWND schema_box{};uint32_t schema=1;
   UINT dpi=96;int page=0;bool uninstall=false,preview=false;DWORD result=0;HANDLE worker=nullptr;
-  HFONT body{},small{},headline{},brand{},strong{};HICON icon{};ULONG_PTR graphics{};
+  HFONT body{},caption_font{},headline{},brand{},strong{};HICON icon{};ULONG_PTR graphics{};
   HBRUSH white=CreateSolidBrush(RGB(248,250,252)),card=CreateSolidBrush(RGB(253,254,255));
   std::filesystem::path target=kDefaultInstall;std::wstring status;
   View(){Gdiplus::GdiplusStartupInput input;input.SuppressExternalCodecs=TRUE;Gdiplus::GdiplusStartup(&graphics,&input,nullptr);}
   ~View(){ClearFonts();DeleteObject(white);DeleteObject(card);if(worker)CloseHandle(worker);if(graphics)Gdiplus::GdiplusShutdown(graphics);}
   int D(int n)const{return MulDiv(n,int(dpi),96);}
   RECT R(int l,int t,int r,int b)const{return {D(l),D(t),D(r),D(b)};}
-  void ClearFonts(){for(auto font:{body,small,headline,brand,strong})if(font)DeleteObject(font);}
-  void Fonts(){ClearFonts();body=Font(D(14));small=Font(D(12));headline=Font(D(27),FW_SEMIBOLD);brand=Font(D(30),FW_SEMIBOLD);strong=Font(D(15),FW_SEMIBOLD);
+  void ClearFonts(){for(auto font:{body,caption_font,headline,brand,strong})if(font)DeleteObject(font);}
+  void Fonts(){ClearFonts();body=Font(D(14));caption_font=Font(D(12));headline=Font(D(27),FW_SEMIBOLD);brand=Font(D(30),FW_SEMIBOLD);strong=Font(D(15),FW_SEMIBOLD);
     icon=static_cast<HICON>(LoadImageW(instance,MAKEINTRESOURCEW(1),IMAGE_ICON,D(56),D(56),LR_SHARED));}
   const wchar_t* Title()const{return page==1?(uninstall?L"正在卸载言舟":L"正在安装言舟"):page==2?(uninstall?L"已完成卸载":L"安装完成，开始落笔"):page==3?L"暂时未能完成":uninstall?L"卸载言舟":L"安装言舟，轻松落笔";}
   const wchar_t* Primary()const{return page==1?L"请稍候…":page==2?L"完成":page==3?L"重试":uninstall?L"确认卸载":L"安装言舟";}
@@ -59,17 +59,17 @@ struct View {
     Text(dc,L"让文字顺畅落下，\n让表达有自己的空间。",R(28,205,178,262),body,RGB(203,222,229),true);
     Rounded(dc,R(20,310,180,386),D(10),RGB(26,65,80),RGB(40,82,94));
     Text(dc,L"离线 · 本机转换",R(32,322,172,346),strong,RGB(162,230,217));
-    Text(dc,L"免费开源，无广告",R(32,351,172,374),small,RGB(201,222,228));
-    Text(dc,L"一念开物 · IDEORIN",R(28,431,188,452),small,RGB(158,189,202));
-    Text(dc,uninstall?L"卸载向导":L"安装向导",R(232,25,395,48),small,p.muted);
-    Label(dc,kVersion,R(490,25,688,48),small,p.muted,DT_RIGHT);
+    Text(dc,L"免费开源，无广告",R(32,351,172,374),caption_font,RGB(201,222,228));
+    Text(dc,L"一念开物 · IDEORIN",R(28,431,188,452),caption_font,RGB(158,189,202));
+    Text(dc,uninstall?L"卸载向导":L"安装向导",R(232,25,395,48),caption_font,p.muted);
+    Label(dc,kVersion,R(490,25,688,48),caption_font,p.muted,DT_RIGHT);
     if(!live)Text(dc,Title(),R(232,65,690,106),headline,p.text);
     const wchar_t* subtitle=page==1?L"正在处理本地组件，请保持此窗口打开。":page==2?(uninstall?L"其他输入法和保留的设置不受影响。":L"言舟已就绪，重开应用后即可选择。"):
         page==3?L"请查看下方原因，调整后可以重新尝试。":uninstall?L"移除程序与输入法注册，保留外观设置和未知文件。":L"五笔与拼音，在本机完成每一次输入。";
     Text(dc,subtitle,R(232,116,688,162),body,p.muted,true);
     if(page==0||page==3){
       Rounded(dc,R(232,179,688,266),D(11),p.background,p.border);
-      Text(dc,uninstall?L"当前安装位置":L"安装位置",R(248,190,620,211),small,p.muted);
+      Text(dc,uninstall?L"当前安装位置":L"安装位置",R(248,190,620,211),caption_font,p.muted);
       if(!live)Text(dc,target.c_str(),R(248,220,uninstall?670:611,248),body,p.text);
       if(!live&&!uninstall)Button(dc,R(619,217,676,251),L"更改",false);
       Text(dc,uninstall?L"请先切换到其他输入法，并关闭使用言舟的应用。":L"默认输入方案",R(232,286,uninstall?688:460,313),body,p.text);
@@ -79,16 +79,16 @@ struct View {
       Rounded(dc,R(232,179,688,318),D(11),p.background,p.border);
       Text(dc,uninstall?L"注销输入法并移除已列明的程序文件。":L"解压固定词库、校验组件并注册输入法。",R(250,197,670,231),strong,p.text,true);
       if(!live){Fill(dc,R(250,260,670,266),RGB(226,235,240));Rounded(dc,R(250,260,380,266),D(3),p.accent,p.accent);}
-      Text(dc,L"实际耗时取决于词库部署与系统响应。",R(250,285,670,307),small,p.muted);
+      Text(dc,L"实际耗时取决于词库部署与系统响应。",R(250,285,670,307),caption_font,p.muted);
     }else if(page==2){
       Rounded(dc,R(232,179,688,333),D(11),p.background,p.border);
       Text(dc,L"✓",R(252,195,300,233),headline,p.accent);
       Text(dc,uninstall?L"已移除言舟的输入法注册":L"接下来，只需三步",R(298,199,665,229),strong,p.text);
       Text(dc,uninstall?L"被应用占用的文件可能在重启后清理。\n其余输入方式和手动创建的文件已保留。":L"1   保存工作，重新打开要输入的应用\n2   在系统输入法切换器中选择言舟\n3   开始输入；外观可在言舟设置中调整",R(252,244,668,320),body,p.text,true);
     }
-    if(!live&&!status.empty())Text(dc,status.c_str(),R(232,353,688,394),small,page==3?RGB(165,58,44):p.muted,true);
+    if(!live&&!status.empty())Text(dc,status.c_str(),R(232,353,688,394),caption_font,page==3?RGB(165,58,44):p.muted,true);
     Fill(dc,R(232,403,688,404),p.line);
-    if(!live){Text(dc,L"版本与开源说明",R(232,426,408,452),small,p.accent);if(page!=1&&page!=2)Button(dc,R(442,421,532,461),L"取消",false);
+    if(!live){Text(dc,L"版本与开源说明",R(232,426,408,452),caption_font,p.accent);if(page!=1&&page!=2)Button(dc,R(442,421,532,461),L"取消",false);
       if(page==2&&!uninstall)Button(dc,R(408,421,532,461),L"打开设置",false);
       Button(dc,R(548,421,688,461),Primary(),true,page==1);}
   }
@@ -96,7 +96,7 @@ struct View {
     auto place=[&](HWND control,RECT r){SetWindowPos(control,nullptr,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_NOZORDER|SWP_NOACTIVATE);};
     place(heading,R(232,65,690,106));SendMessageW(heading,WM_SETFONT,reinterpret_cast<WPARAM>(headline),TRUE);
     place(path_control,R(248,220,uninstall?670:611,249));SendMessageW(path_control,WM_SETFONT,reinterpret_cast<WPARAM>(body),TRUE);
-    place(status_control,R(232,353,688,394));SendMessageW(status_control,WM_SETFONT,reinterpret_cast<WPARAM>(small),TRUE);
+    place(status_control,R(232,353,688,394));SendMessageW(status_control,WM_SETFONT,reinterpret_cast<WPARAM>(caption_font),TRUE);
     place(primary,R(548,421,688,461));place(secondary,R(442,421,532,461));place(browse,R(619,217,676,251));place(schema_box,R(484,282,688,440));
     SendMessageW(schema_box,WM_SETFONT,reinterpret_cast<WPARAM>(body),TRUE);SendMessageW(schema_box,CB_SETITEMHEIGHT,WPARAM(-1),D(28));
     place(notes,R(232,421,405,461));place(settings,R(408,421,532,461));place(progress,R(250,259,670,267));
@@ -161,7 +161,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(message==WM_PAINT){PAINTSTRUCT ps{};HDC dc=BeginPaint(window,&ps);RECT rect{};GetClientRect(window,&rect);auto buffer=CreateCompatibleDC(dc);auto bitmap=CreateCompatibleBitmap(dc,rect.right,rect.bottom);auto old=SelectObject(buffer,bitmap);v->Draw(buffer,true);BitBlt(dc,0,0,rect.right,rect.bottom,buffer,0,0,SRCCOPY);SelectObject(buffer,old);DeleteObject(bitmap);DeleteDC(buffer);EndPaint(window,&ps);return 0;}
   if(message==WM_CTLCOLORSTATIC){auto dc=reinterpret_cast<HDC>(wp);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,reinterpret_cast<HWND>(lp)==v->status_control?(v->page==3?RGB(165,58,44):RGB(94,116,133)):RGB(22,44,62));return reinterpret_cast<LRESULT>(reinterpret_cast<HWND>(lp)==v->path_control?v->card:v->white);}
   if(message==WM_DRAWITEM){auto& item=*reinterpret_cast<DRAWITEMSTRUCT*>(lp);wchar_t text[80]{};GetWindowTextW(item.hwndItem,text,80);
-    if(item.CtlID==notes_id){Fill(item.hDC,item.rcItem,RGB(248,250,252));Label(item.hDC,text,item.rcItem,v->small,RGB(12,109,108));if(item.itemState&ODS_FOCUS){RECT r=item.rcItem;InflateRect(&r,-v->D(3),-v->D(3));DrawFocusRect(item.hDC,&r);}}
+    if(item.CtlID==notes_id){Fill(item.hDC,item.rcItem,RGB(248,250,252));Label(item.hDC,text,item.rcItem,v->caption_font,RGB(12,109,108));if(item.itemState&ODS_FOCUS){RECT r=item.rcItem;InflateRect(&r,-v->D(3),-v->D(3));DrawFocusRect(item.hDC,&r);}}
     else {Fill(item.hDC,item.rcItem,item.CtlID==browse_id?RGB(253,254,255):RGB(248,250,252));v->Button(item.hDC,item.rcItem,text,item.CtlID==primary_id,(item.itemState&ODS_DISABLED)!=0,(item.itemState&ODS_FOCUS)!=0,(item.itemState&ODS_SELECTED)!=0);}
     return TRUE;}
   if(message==WM_DPICHANGED){v->dpi=HIWORD(wp);auto r=reinterpret_cast<RECT*>(lp);SetWindowPos(window,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);v->Fonts();v->Layout();return 0;}

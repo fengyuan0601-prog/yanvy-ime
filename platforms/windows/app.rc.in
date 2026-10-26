@@ -24,6 +24,7 @@ BEGIN
       VALUE "FileVersion", "@YANVY_VERSION@\0"
       VALUE "ProductName", "YANVY\0"
       VALUE "ProductVersion", "@YANVY_VERSION@\0"
+      VALUE "SourceCommit", "@YANVY_SOURCE_COMMIT@\0"
     END
   END
   BLOCK "VarFileInfo"

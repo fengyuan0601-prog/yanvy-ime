@@ -37,7 +37,8 @@ def main():
         raise SystemExit("Commit the reviewed project source first.")
     manifest=json.loads((ROOT/"third_party/windows-runtime/manifest.json").read_text(encoding="utf-8"))
     assert hashlib.sha256(a.boost_archive.read_bytes()).hexdigest()==manifest["boost_source_sha256"]
-    components=[(ROOT,"yanvy-ime/",head(ROOT))]
+    commit=head(ROOT)
+    components=[(ROOT,"yanvy-ime/",commit)]
     for relative,expected in PINS.items():
         repo=a.librime_root/relative
         assert head(repo)==expected,(relative,"source revision mismatch")
@@ -59,7 +60,7 @@ def main():
                         info.filename=prefix+name
                         out.writestr(info,src.read(name))
             out.write(a.boost_archive,"dependencies/"+a.boost_archive.name,compress_type=zipfile.ZIP_STORED)
-            records={"version":VERSION,"yanvy_commit":head(ROOT),"rime_sdk":manifest,
+            records={"version":VERSION,"yanvy_commit":commit,"rime_sdk":manifest,
                      "components":[{"path":prefix,"commit":revision} for _,prefix,revision in components]}
             out.writestr("SOURCE-MANIFEST.json",json.dumps(records,indent=2)+"\n")
             out.writestr("README-CORRESPONDING-SOURCE.txt",
@@ -79,6 +80,8 @@ def main():
     with zipfile.ZipFile(a.output) as archive:
         assert archive.testzip() is None
         assert not any("/.git/" in name or name.endswith("/.git") for name in archive.namelist())
+    if head(ROOT)!=commit or subprocess.check_output(["git","status","--porcelain"],cwd=ROOT,text=True):
+        raise SystemExit("Source changed during packaging; discard this intermediate archive and rerun from clean source.")
     print(a.output.resolve())
 
 if __name__=="__main__":main()

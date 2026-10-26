@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from stage_data import stage
 from release_version import VERSION, WINDOWS_VERSION, CHANNEL
+from windows_file_version import version_value
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -19,6 +20,9 @@ def main():
     p.add_argument("--rime-sdk",type=Path,required=True)
     p.add_argument("--stage",type=Path,required=True)
     a=p.parse_args()
+    commit=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()
+    if subprocess.check_output(["git","status","--porcelain"],cwd=ROOT,text=True):
+        raise SystemExit("Commit reviewed source before staging a distributable package.")
     if a.stage.exists() and any(a.stage.iterdir()):
         raise SystemExit("Use a new empty package staging directory.")
     subprocess.run([__import__('sys').executable,str(ROOT/"scripts/generate_policy.py")],check=True)
@@ -27,6 +31,8 @@ def main():
     assert hashlib.sha256(dll.read_bytes()).hexdigest()==DLL_SHA256
     a.stage.mkdir(parents=True,exist_ok=True)
     for file in ("YANVY-TSF.dll","YANVY-Server.exe","YANVY-Setup.exe","YANVY-Settings.exe","Uninstall.exe"):
+        if version_value(a.build/file,'SourceCommit')!=commit or version_value(a.build/file,'FileVersion')!=VERSION:
+            raise SystemExit(f"Reconfigure and rebuild {file}: its source commit or version differs from HEAD.")
         shutil.copy2(a.build/file,a.stage/file)
     shutil.copy2(dll,a.stage/"rime.dll")
     stage(a.stage/"data",a.stage/"profile")
@@ -43,9 +49,8 @@ def main():
                     shutil.copy2(file,target)
     shutil.copy2(ROOT/"third_party/GPL-3.0.txt",licenses/"GPL-3.0.txt")
     shutil.copy2(ROOT/"platforms/windows/TESTING.txt",a.stage/"TESTING.txt")
-    commit=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()
     dirty=bool(subprocess.check_output(["git","status","--porcelain"],cwd=ROOT,text=True))
-    if dirty:
+    if dirty or subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()!=commit:
         raise SystemExit("Commit the reviewed sources before creating a distributable package.")
     records={str(f.relative_to(a.stage)).replace("\\","/"):hashlib.sha256(f.read_bytes()).hexdigest()
              for f in a.stage.rglob("*") if f.is_file()}
