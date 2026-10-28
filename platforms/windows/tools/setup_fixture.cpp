@@ -17,7 +17,7 @@ int wmain(int argc,wchar_t** argv){
     CloseHandle(process.hThread);WaitForSingleObject(process.hProcess,INFINITE);DWORD code=1;GetExitCodeProcess(process.hProcess,&code);CloseHandle(process.hProcess);return int(code);
   }
   if(option==L"--register")category="register";else if(option==L"--unregister")category="unregister";
-  else if(option==L"--check")category="check";else if(option==L"--stop")category="stop";else return 1;
+  else if(option==L"--check")category="check";else if(option==L"--stop"||option==L"--stop-previous-brokers")category="stop";else return 1;
   std::ofstream(root/L"fixture-trace.txt",std::ios::app)<<category<<'\n';
   int code=0;std::ifstream(root/(category+"-result.txt"))>>code;return code;
 }

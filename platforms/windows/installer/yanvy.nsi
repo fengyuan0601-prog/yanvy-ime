@@ -211,6 +211,15 @@ Section "言舟 Windows TSF 开发测试"
   StrCpy $CleanupWarning 0
   ${If} $PreviousDir != ""
   ${AndIf} $PreviousDir != $INSTDIR
+    ; Signal only known older broker generations using the new trusted helper.
+    ; This avoids leaving an old notification icon beside the new one.
+    ClearErrors
+    ExecWait '"$INSTDIR\YANVY-Setup.exe" --stop-previous-brokers' $0
+    IfErrors old_broker_warning
+    ${If} $0 != 0
+      old_broker_warning:
+      StrCpy $CleanupWarning 1
+    ${EndIf}
     ReadEnvStr $0 "YANVY_PREVIOUS_CAN_CLEAN"
     ${If} $0 == "1"
       IfFileExists "$PreviousDir\YANVY-INSTALL-MARKER.txt" 0 old_cleanup_unsafe

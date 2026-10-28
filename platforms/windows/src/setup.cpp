@@ -136,6 +136,23 @@ int wmain(int argc, wchar_t** argv) {
   HRESULT hr = E_INVALIDARG;
   if (option == L"--register") hr = Register(machine);
   else if (option == L"--unregister") hr = Unregister(machine);
+  else if (option == L"--stop-previous-brokers") {
+    // Close the superseded per-user brokers after a successful upgrade so
+    // their notification icons cannot coexist with the new one. Do not run
+    // executables from the user-selected previous directory as administrator.
+    const auto sid = yanvy::UserSid();
+    DWORD session = 0;
+    if (sid.empty() || !ProcessIdToSessionId(GetCurrentProcessId(), &session)) hr = E_FAIL;
+    else {
+      hr = S_OK;
+      for (const auto version : {L"v3", L"v4"}) {
+        const auto name = std::wstring(L"Local\\Stop-YANVY-") + version + L"-" + sid + L"-" + std::to_wstring(session);
+        HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, name.c_str());
+        if (event) { if (!SetEvent(event)) hr = HRESULT_FROM_WIN32(GetLastError()); CloseHandle(event); }
+        else if (GetLastError() != ERROR_FILE_NOT_FOUND) hr = HRESULT_FROM_WIN32(GetLastError());
+      }
+    }
+  }
   else if (option == L"--check-dependencies") {
     // Load the packaged engine explicitly before starting the server. Missing
     // dependencies are reported without launching a child stuck in a loader UI.

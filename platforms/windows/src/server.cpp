@@ -62,7 +62,9 @@ int Serve(const std::filesystem::path& test_profile = {}) {
     yanvy::PrepareUserProfile(root,profile);
     ime::Engine engine((root / L"data").u8string(), profile.u8string());
     ReleaseMutex(profile_lock);CloseHandle(profile_lock);guard.handle=nullptr;
-    yanvy::TrayIcon tray;
+    // Isolated protocol fixtures must not create an extra user-facing icon.
+    std::unique_ptr<yanvy::TrayIcon> tray;
+    if (test_profile.empty()) tray = std::make_unique<yanvy::TrayIcon>();
     GUID owner{};
     std::string schema = "wubi86";
     while (WaitForSingleObject(stop, 0) != WAIT_OBJECT_0) {
@@ -160,7 +162,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
       return 5;
     } catch (...) { return 5; }
   }
-  if (option == L"--tray-smoke") { yanvy::TrayIcon tray; return tray.Registered()&&tray.RemoveForTest()?0:7; }
+  if (option == L"--tray-smoke") { yanvy::TrayIcon tray; return tray.Registered()&&tray.Version4()&&tray.RemoveForTest()?0:7; }
 #ifdef YANVY_BROKER_FIXTURE
   if(option==L"--serve-test"&&!test_profile.empty())return Serve(test_profile);
 #endif

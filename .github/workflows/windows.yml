@@ -28,13 +28,15 @@ jobs:
       - name: Render native candidate UI at three scales
         shell: pwsh
         run: |
-          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture
+          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-UI-Render.exe --check-layout
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-Registration-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-Edit-Session-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-Tray-Event-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           foreach ($dpi in 96,144,192) {
             & build/windows/Release/YANVY-UI-Render.exe "build/windows/candidates-$dpi.png" $dpi

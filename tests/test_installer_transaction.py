@@ -51,10 +51,11 @@ def main():
         assert PRODUCT_KEY in source
         source=source.replace(PRODUCT_KEY,key_path).replace(' HKLM ',' HKCU ')
         source=source.replace('$SMPROGRAMS',str(root/'shortcuts'))
+        source=source.replace('InstallDir "$LOCALAPPDATA\\Programs\\YANVY\\${YANVY_VERSION}"','InstallDir "'+str(root/'must-not-use-default')+'"')
         icon=str(ROOT/'assets/brand/yanvy.ico')
         source=source.replace('..\\..\\..\\assets\\brand\\yanvy.ico',icon)
         script=root/'transaction.nsi';script.write_text(source,encoding='utf-8-sig')
-        assert PRODUCT_KEY not in source and ' HKLM ' not in source and '$SMPROGRAMS' not in source
+        assert PRODUCT_KEY not in source and ' HKLM ' not in source and '$SMPROGRAMS' not in source and '$LOCALAPPDATA' not in source
         installer=root/'transaction.exe'
         subprocess.run([str(a.makensis),'/V2',f'/DSTAGE={stage}',f'/DOUTPUT={installer}',str(script)],check=True,timeout=30)
         if scenario!='rollback-unregister-failure':
@@ -84,8 +85,10 @@ def main():
                 assert old_trace=='register\n' and read_key('InstallLocation')==str(old)
         elif scenario=='unsafe-previous':
             assert read_key('InstallLocation')==str(new) and (old/'YANVY-Setup.exe').exists()
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nstop\n'
         else:
             assert not old_trace and read_key('InstallLocation')==str(new)
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nstop\n'
             assert not (old/'YANVY-Setup.exe').exists() and not (old/'Uninstall.exe').exists()
             assert (old/'keep.txt').read_text()=='unrelated old file must survive'
             text=(new/'settings.ini').read_bytes()
@@ -98,7 +101,7 @@ def main():
                 failed=subprocess.run(command,env=env,timeout=30)
                 assert failed.returncode==30
                 assert (new/'YANVY-Setup.exe').exists() and read_key('InstallLocation')==str(new)
-                assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'
+                assert (new/'fixture-trace.txt').read_text()=='check\nregister\nstop\nunregister\n'
                 (new/'unregister-result.txt').unlink()
             command=subprocess.list2cmdline([str(new/'Uninstall-core.exe')])+' /S _?='+str(new)
             removed=subprocess.run(command,env=env,timeout=30)
@@ -108,7 +111,7 @@ def main():
                 time.sleep(.1)
             assert (new/'keep.txt').read_text()=='must survive exact-file removal'
             assert (new/'settings.ini').exists() and not (new/'YANVY-Setup.exe').exists()
-            assert (new/'fixture-trace.txt').read_text()=='check\nregister\n'+('unregister\n' if scenario=='uninstall-failure' else '')+'unregister\nstop\n'
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nstop\n'+('unregister\n' if scenario=='uninstall-failure' else '')+'unregister\nstop\n'
             try:read_key('InstallLocation')
             except FileNotFoundError:pass
             else:raise AssertionError('fixture uninstall key was not removed')
