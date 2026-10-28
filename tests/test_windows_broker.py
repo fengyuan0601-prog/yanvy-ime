@@ -56,7 +56,7 @@ def main():
     session = w.DWORD()
     assert k.ProcessIdToSessionId(os.getpid(), c.byref(session))
     pipe_base = rf"\\.\pipe\YANVY-v{{}}-{sid.value}-{session.value}-test-{args.namespace}"
-    pipe = pipe_base.format(7)
+    pipe = pipe_base.format(8)
     k.LocalFree(sid)
     k.CloseHandle(token)
     checks = []
@@ -66,7 +66,7 @@ def main():
             raise AssertionError(name)
         checks.append({"name": name, "status": "PASS"})
 
-    def call(owner, op, key=0, schema=0, raw_version=2, endpoint=7):
+    def call(owner, op, key=0, schema=0, raw_version=2, endpoint=8):
         q = Request(MAGIC, raw_version, op, key, 0, schema, (c.c_ubyte * 16).from_buffer_copy(owner.bytes_le))
         handle = w.HANDLE(-1).value
         for _ in range(100):
@@ -97,7 +97,7 @@ def main():
         time.sleep(.05)
     check("cross_arch_protocol_layout", c.sizeof(Request) == 40 and c.sizeof(Response) == 17444)
     one, two = uuid.uuid4(), uuid.uuid4()
-    for endpoint in range(2,7):
+    for endpoint in range(2,8):
         check(f"legacy_v{endpoint}_focus",call(one,1,schema=1,endpoint=endpoint).ok==1)
         check(f"legacy_v{endpoint}_real_input",call(one,2,ord('n'),schema=1,endpoint=endpoint).input=='n')
         check(f"legacy_v{endpoint}_shared_state",call(one,4,schema=1).input=='n')

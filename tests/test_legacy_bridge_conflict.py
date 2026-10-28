@@ -39,7 +39,7 @@ def main():
     process=subprocess.Popen([str(fixture),'--serve-test',str(profile),namespace])
     try:
         deadline=time.monotonic()+30
-        while not k.WaitNamedPipeW(base.format(7),100):
+        while not k.WaitNamedPipeW(base.format(8),100):
             if process.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Fixture broker failed to start')
             time.sleep(.05)
         duplicate=k.CreateNamedPipeW(base.format(4),0x00080003,0x0000000c,1,64,64,500,None)

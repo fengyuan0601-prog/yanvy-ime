@@ -1,0 +1,6 @@
+LIBRARY "YANVY-TSF-Host-Fixture"
+EXPORTS
+  DllGetClassObject PRIVATE
+  DllCanUnloadNow PRIVATE
+  YanvyConfigureTextHost PRIVATE
+  YanvyGetTextHostDiagnostics PRIVATE

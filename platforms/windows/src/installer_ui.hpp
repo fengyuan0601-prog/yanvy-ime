@@ -2,6 +2,7 @@
 #pragma once
 #include "common.hpp"
 #include "version.hpp"
+#include "machine_store.hpp"
 namespace yanvy {
 inline std::filesystem::path SelectDefaultInstall(bool preferred,const std::filesystem::path& local){
   return preferred?std::filesystem::path(L"E:\\Codex\\Programs")/L"YANVY"/kVersion:local/L"Programs"/L"YANVY"/kVersion;
@@ -11,7 +12,7 @@ inline std::filesystem::path SelectSetupTemp(bool preferred,const std::filesyste
 }
 inline std::filesystem::path ResolveInstallPath(const std::filesystem::path& selected){
   const auto name=selected.filename().wstring();
-  if(name.rfind(L"0.1.0-",0)==0&&_wcsicmp(selected.parent_path().filename().c_str(),L"YANVY")==0)return selected.parent_path()/kVersion;
+  if(VersionDirectoryName(name)&&_wcsicmp(selected.parent_path().filename().c_str(),L"YANVY")==0)return selected.parent_path()/kVersion;
   if(_wcsicmp(selected.filename().c_str(),L"YANVY")==0)return selected/kVersion;
   return selected/L"YANVY"/kVersion;
 }

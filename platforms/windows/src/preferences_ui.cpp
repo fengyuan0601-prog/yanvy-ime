@@ -92,7 +92,7 @@ struct View {
       RECT area=R(202,305,690,481);Rounded(buffer,area,D(11),RGB(234,241,246),RGB(226,234,240));auto size=preview.Measure(buffer,D(458));int x=(area.left+area.right-size.cx)/2,y=(area.top+area.bottom-size.cy)/2;preview.Draw(buffer,{x,y,x+size.cx,y+size.cy});
     }else{
       Rounded(buffer,R(202,112,690,461),D(11),p.background,p.border);Text(buffer,L"让文字顺畅落下",R(224,132,665,170),strong,p.text);
-      Text(buffer,L"输入转换与候选生成在本机完成。\n默认不学习，不保存正文日志和剪贴板历史。\n\n当前为 Windows x64 未签名候选版。\n完整跨应用、升级卸载与多屏验收仍待完成。\n\n原创核心与文档采用 BSD-3-Clause。\nWindows 衍生前端和双拼方案保留 GPL 许可。\n完整来源与许可证随安装包提供。",R(224,190,665,435),body,p.muted,true);
+      Text(buffer,L"输入转换与候选生成在本机完成。\n默认不学习，不保存正文日志和剪贴板历史。\n\nWindows 11 x64 · 未签名。\n版本见右上角，适用范围与使用说明随包提供。\n\n原创核心与文档采用 BSD-3-Clause。\nWindows 衍生前端和双拼方案保留 GPL 许可。\n完整来源与许可证随安装包提供。",R(224,190,665,435),body,p.muted,true);
     }
     BitBlt(dc,0,0,bounds.right,bounds.bottom,buffer,0,0,SRCCOPY);SelectObject(buffer,old);DeleteObject(bitmap);DeleteDC(buffer);EndPaint(window,&paint);
   }

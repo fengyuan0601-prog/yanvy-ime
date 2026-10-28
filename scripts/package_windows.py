@@ -97,6 +97,23 @@ def main():
     directories=sorted((d for d in a.stage.rglob("*") if d.is_dir()),key=lambda d:len(d.parts),reverse=True)
     lines += ['RMDir "$INSTDIR\\'+str(d.relative_to(a.stage)).replace('/','\\')+'"' for d in directories]
     (a.stage.parent/(a.stage.name+"-uninstall.nsh")).write_text("\n".join(lines)+"\n",encoding="utf-8")
+    # This list runs exclusively under the original user's token. Never mix
+    # executable/runtime files into the freely selected dictionary location.
+    denied={'.exe','.dll','.com','.bat','.cmd','.ps1','.vbs','.js'}
+    def in_user_payload(f):
+        relative=f.relative_to(a.stage)
+        return ((relative.parts[0] in ('data','profile') and len(relative.parts)==2 and f.suffix.lower()=='.yaml')
+                or (relative.parts[0]=='licenses' and f.suffix.lower() not in denied)
+                or (len(relative.parts)==1 and f.name in ('TESTING.txt','BUILD-INFO.json')))
+    data_files=[f for f in files if in_user_payload(f)]
+    data_lines=['; Exact user-data cleanup; marker is checked and removed by user_data.nsi.']
+    data_lines += ['Delete "$INSTDIR\\'+str(f.relative_to(a.stage)).replace('/','\\')+'"' for f in data_files]
+    data_lines += ['IfErrors 0 +2','StrCpy $CleanupFileError 1','ClearErrors']
+    data_dirs={parent for f in data_files for parent in f.parents if parent!=a.stage and a.stage in parent.parents}
+    data_lines += ['RMDir "$INSTDIR\\'+str(d.relative_to(a.stage)).replace('/','\\')+'"'
+                   for d in sorted(data_dirs,key=lambda d:len(d.parts),reverse=True)]
+    data_lines += ['ClearErrors']
+    (a.stage.parent/(a.stage.name+"-data-uninstall.nsh")).write_text("\n".join(data_lines)+"\n",encoding="utf-8")
     print(a.stage.resolve())
 
 if __name__=="__main__":main()

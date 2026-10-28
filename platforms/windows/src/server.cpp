@@ -75,7 +75,7 @@ struct LegacyBridge {
 };
 struct LegacyBridges {
   HANDLE stop;
-  std::array<LegacyBridge,5> items{};
+  std::array<LegacyBridge,6> items{};
   bool Start(SECURITY_ATTRIBUTES* security) {
     for (size_t i=0;i<items.size();++i) {
       items[i].version=unsigned(i+2);items[i].stop=stop;items[i].security=security;
@@ -110,6 +110,8 @@ int Serve(const std::filesystem::path& test_profile = {}) {
   int result = 0;
   try {
     const auto root = yanvy::ModuleDir();
+    const auto data_root=yanvy::InstalledDataRoot(root);
+    if(data_root.empty())throw std::runtime_error("Invalid installed data location.");
     auto user=yanvy::UserDataRoot();
     auto profile=test_profile.empty()?user/yanvy::kVersion/L"profile":test_profile;
     if(test_profile.empty()&&user.empty())throw std::runtime_error("User data directory unavailable.");
@@ -119,8 +121,8 @@ int Serve(const std::filesystem::path& test_profile = {}) {
     DWORD wait=WaitForSingleObject(profile_lock,30000);
     if(wait!=WAIT_OBJECT_0&&wait!=WAIT_ABANDONED){CloseHandle(profile_lock);throw std::runtime_error("Cannot lock user profile.");}
     struct LockGuard{HANDLE handle;~LockGuard(){if(handle){ReleaseMutex(handle);CloseHandle(handle);}}} guard{profile_lock};
-    yanvy::PrepareUserProfile(root,profile);
-    ime::Engine engine((root / L"data").u8string(), profile.u8string());
+    yanvy::PrepareUserProfile(data_root,profile);
+    ime::Engine engine((data_root / L"data").u8string(), profile.u8string());
     ReleaseMutex(profile_lock);CloseHandle(profile_lock);guard.handle=nullptr;
     // Isolated protocol fixtures must not create an extra user-facing icon.
     std::unique_ptr<yanvy::TrayIcon> tray;
@@ -207,6 +209,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   }
 #endif
   LocalFree(argv);
+  if(option==L"--serve"&&IsUserAnAdmin()){
+    const auto root=yanvy::ModuleDir(),exe=root/L"YANVY-Server.exe";
+    return yanvy::StartUserProcess(exe,L"\""+exe.wstring()+L"\" --serve",root)?0:5;
+  }
   if (option == L"--stop"
 #ifdef YANVY_BROKER_FIXTURE
       || (option == L"--stop-test" && !yanvy::test_object_suffix.empty())

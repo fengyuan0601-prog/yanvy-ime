@@ -32,8 +32,29 @@ class Context final : public ITfContext {
   HRESULT STDMETHODCALLTYPE CreateRangeBackup(TfEditCookie,ITfRange*,ITfRangeBackup**) override { return E_NOTIMPL; }
  private: LONG refs_ = 1;
 };
+class Document final : public ITfDocumentMgr {
+ public:
+  explicit Document(ITfContext* context):top(context){}
+  HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,void** out) override {
+    if(!out)return E_POINTER;
+    *out=nullptr;
+    if(iid!=IID_IUnknown&&iid!=IID_ITfDocumentMgr)return E_NOINTERFACE;
+    *out=static_cast<ITfDocumentMgr*>(this);AddRef();return S_OK;
+  }
+  ULONG STDMETHODCALLTYPE AddRef() override {return ++references_;}
+  ULONG STDMETHODCALLTYPE Release() override {auto n=--references_;if(!n)delete this;return n;}
+  HRESULT STDMETHODCALLTYPE CreateContext(TfClientId,DWORD,IUnknown*,ITfContext**,TfEditCookie*) override{return E_NOTIMPL;}
+  HRESULT STDMETHODCALLTYPE Push(ITfContext*) override{return E_NOTIMPL;}
+  HRESULT STDMETHODCALLTYPE Pop(DWORD) override{return E_NOTIMPL;}
+  HRESULT STDMETHODCALLTYPE GetTop(ITfContext** out) override {if(!out)return E_POINTER;return top.CopyTo(out);}
+  HRESULT STDMETHODCALLTYPE GetBase(ITfContext** out) override {return GetTop(out);}
+  HRESULT STDMETHODCALLTYPE EnumContexts(IEnumTfContexts**) override{return E_NOTIMPL;}
+  ComPtr<ITfContext> top;
+ private:ULONG references_=1;
+};
 
 int wmain() {
+  if (FAILED(CoCreateGuid(&yanvy::kToggleEnglish)) || FAILED(CoCreateGuid(&yanvy::kToggleEnglishRelease))) return 1;
   if (FAILED(CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED))) return 1;
   int result=1;
   {
@@ -86,6 +107,68 @@ int wmain() {
           ok = SetKeyboardState(local) && ok;
           service->OnTestKeyDown(context.Get(),VK_SPACE,0,&eaten);
           if (eaten) { std::cerr << "FAIL Ctrl+Shift+Space was intercepted\n"; ok=false; }
+          service->OnPreservedKey(context.Get(),yanvy::kToggleEnglish,&eaten);
+          if (eaten || !open_is(true)) { std::cerr << "FAIL preserved Ctrl+Shift+Space was intercepted\n"; ok=false; }
+          local[VK_SHIFT]=local[VK_LSHIFT]=0;
+          ok = SetKeyboardState(local) && ok;
+          ok = toggle() && open_is(false) && ok;
+          for (int i=0;i<16;++i) ok = toggle() && open_is(false) && ok;
+          // A host that delivers both paths must still switch only once.
+          ok = SUCCEEDED(service->OnKeyDown(context.Get(),VK_SPACE,0,&eaten)) && eaten && open_is(false) && ok;
+          local[VK_CONTROL]=local[VK_LCONTROL]=0; // release Ctrl before Space
+          ok = SetKeyboardState(local) && ok;
+          service->OnTestKeyUp(context.Get(),VK_CONTROL,0,&eaten);
+          ok = !eaten && ok;
+          local[VK_SPACE]=0;
+          ok = SetKeyboardState(local) && ok;
+          service->OnTestKeyUp(context.Get(),VK_SPACE,0,&eaten);
+          ok = eaten && ok;
+          service->OnKeyUp(context.Get(),VK_SPACE,0,&eaten);
+          ok = eaten && ok;
+          local[VK_CONTROL]=local[VK_LCONTROL]=local[VK_SPACE]=0x80;
+          ok = SetKeyboardState(local) && ok;
+          ok = toggle() && open_is(true) && ok;
+          for (int i=0;i<16;++i) ok = toggle() && open_is(true) && ok;
+          local[VK_SPACE]=0; // release Space before Ctrl
+          ok = SetKeyboardState(local) && ok;
+          service->OnTestKeyUp(context.Get(),VK_SPACE,0,&eaten); ok = eaten && ok;
+          service->OnKeyUp(context.Get(),VK_SPACE,0,&eaten); ok = eaten && ok;
+          local[VK_SPACE]=0x80; ok = SetKeyboardState(local) && ok;
+          ok = SUCCEEDED(service->OnKeyDown(context.Get(),VK_SPACE,0,&eaten)) && eaten && open_is(false) && ok;
+          for (int i=0;i<16;++i) ok = toggle() && open_is(false) && ok;
+          service->OnKillThreadFocus(); // a release outside this app must not stick
+          ok = toggle() && open_is(true) && ok;
+          service->OnSetFocus(FALSE);
+          ok = toggle() && open_is(true) && ok;
+          service->OnKeyUp(context.Get(),VK_SPACE,0,&eaten);
+          // Closed-keyboard hosts may deliver preserved releases only.
+          ok = toggle() && open_is(false) && ok;
+          service->OnPreservedKey(nullptr,yanvy::kToggleEnglishRelease,&eaten);
+          ok = eaten && open_is(false) && ok;
+          ok = toggle() && open_is(true) && ok;
+          service->OnPreservedKey(nullptr,yanvy::kToggleEnglishRelease,&eaten);
+          ok = eaten && open_is(true) && ok;
+          service->OnPreservedKey(nullptr,yanvy::kToggleEnglishRelease,&eaten);
+          ok = !eaten && open_is(true) && ok; // ordinary Space release passes on
+          ComPtr<Document> document;document.Attach(new Document(context.Get()));
+          service->SeedPendingFocusFixture(context.Get());
+          service->OnSetFocus(document.Get(),document.Get());
+          if(!service->HasPendingFocusFixture()){
+            std::cerr<<"FAIL duplicate document focus discarded pending input\n";ok=false;
+          }
+          // A different top context must still cancel, even in the same doc.
+          ComPtr<Context> other_context;other_context.Attach(new Context);
+          document->top=other_context;
+          service->SeedPendingFocusFixture(context.Get());
+          service->OnSetFocus(document.Get(),document.Get());
+          if(service->HasPendingFocusFixture()){
+            std::cerr<<"FAIL changed document context retained pending input\n";ok=false;
+          }
+          service->SeedPendingFocusFixture(other_context.Get());
+          service->OnSetFocus(nullptr,document.Get());
+          if(service->HasPendingFocusFixture()){
+            std::cerr<<"FAIL real document focus loss retained pending input\n";ok=false;
+          }
           service->EndModeFixture(); result=ok ? 0 : 1;
         }
         if (keyboard_ready) SetKeyboardState(saved);

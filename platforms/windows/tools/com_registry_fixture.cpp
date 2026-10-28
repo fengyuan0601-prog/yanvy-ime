@@ -3,7 +3,14 @@
 #define YANVY_SETUP_REGISTRY_FIXTURE
 #include "../src/setup.cpp"
 
-int wmain() {
+int wmain(int argc,wchar_t** argv) {
+  if(argc==4&&std::wstring(argv[1])==L"--service-identities"){
+    const HRESULT current=VerifyServiceIdentity(argv[2]),legacy=VerifyServiceIdentity(argv[3]);
+    const bool ok=SUCCEEDED(current)&&legacy==CLASS_E_CLASSNOTAVAILABLE;
+    std::cout<<(ok?"current service accepted and legacy service refused before registry writes PASS\n":"service identity check FAIL\n");
+    return ok?0:1;
+  }
+  if(argc!=1)return 2;
   GUID id{}; wchar_t name[64]{};
   if (FAILED(CoCreateGuid(&id)) || !StringFromGUID2(id,name,64)) return 1;
   const std::wstring root=std::wstring(L"Software\\Classes\\CLSID\\")+name;

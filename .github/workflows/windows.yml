@@ -26,13 +26,15 @@ jobs:
           $sdk = (Resolve-Path .deps/rime/dist).Path.Replace('\','/')
           cmake -S platforms/windows -B build/windows-x86 -G "Visual Studio 17 2022" -A Win32 "-DRIME_INCLUDE_DIR=$sdk/include" "-DRIME_LIBRARY=$sdk/lib/rime.lib"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build build/windows-x86 --config Release --target YANVY-TSF YANVY-COM-Architecture-Fixture YANVY-Broker-Architecture-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture
+          cmake --build build/windows-x86 --config Release --target YANVY-TSF YANVY-COM-Architecture-Fixture YANVY-Broker-Architecture-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-TSF-Identity-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows-x86/Release/YANVY-COM-Architecture-Fixture.exe (Resolve-Path build/windows-x86/Release/YANVY-TSF.dll).Path
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows-x86/Release/YANVY-Input-Mode-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows-x86/Release/YANVY-TSF-Mode-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows-x86/Release/YANVY-TSF-Identity-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Core privacy and editing regressions
         shell: pwsh
@@ -42,7 +44,7 @@ jobs:
       - name: Render native candidate UI at three scales
         shell: pwsh
         run: |
-          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-COM-Registry-Fixture YANVY-Broker-Stop-Fixture
+          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-COM-Registry-Fixture YANVY-Broker-Stop-Fixture YANVY-Machine-Store-Fixture YANVY-User-Cleanup-Fixture YANVY-Runtime-Environment-Fixture YANVY-Installer-Diagnostics-Fixture YANVY-TSF-Identity-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-UI-Render.exe --check-layout
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -57,6 +59,16 @@ jobs:
           & build/windows/Release/YANVY-TSF-Mode-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-COM-Registry-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-Machine-Store-Fixture.exe (Join-Path (Resolve-Path build/windows).Path 'machine-store-fixture')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-User-Cleanup-Fixture.exe (Join-Path (Resolve-Path build/windows).Path 'user-cleanup-fixture')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-Runtime-Environment-Fixture.exe (Join-Path (Resolve-Path build/windows).Path 'runtime-fixture')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-Installer-Diagnostics-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-TSF-Identity-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-Broker-Stop-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

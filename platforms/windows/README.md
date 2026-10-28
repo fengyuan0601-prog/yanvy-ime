@@ -1,6 +1,6 @@
-# Windows 原生开发测试
+# Windows 原生输入法
 
-版本：0.1.0-rc.9，Windows 10/11 x64 的桌面应用测试目标。**未签名候选版，不是稳定日用版。** 维护者此前已有真实输入试用反馈；本次新安装器和多方案输入的完整应用/升级卸载矩阵仍待完成。见 `docs/RC9-READINESS.md`；以前候选版记录保留。
+版本：0.1.0，Windows 11 x64 桌面系统。安装包未签名；当前正在执行最终发布验证，实际完成范围见 docs/RELEASE-AUDIT-2026-10-28.md。旧候选版记录作为历史证据保留。
 
 此版本为 Windows x64 系统同时提供 x64 与 x86 TSF 组件；32 位 Office/WPS 和其他真实应用尚未实测，不承诺所有应用可用。
 
@@ -36,17 +36,19 @@ cmake --build build/windows
 ```powershell
 python scripts/package_windows.py --build build/windows --build-x86 build/windows-x86 --rime-sdk E:/Codex/Programs/YANVY-Rime-1.10.0-clang --stage E:/Codex/Temp/yanvy-stage-unique
 E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-payload.exe platforms/windows/installer/yanvy.nsi
-cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe
+$commit = git rev-parse HEAD
+E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-user-data.exe /DCLEANUP=E:\Codex\Temp\yanvy-stage-unique-data-uninstall.nsh /DSOURCE_COMMIT=$commit platforms/windows/installer/user_data.nsi
+cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe -DNSIS_DATA_PAYLOAD=E:/Codex/Temp/yanvy-user-data.exe
 cmake --build build/windows --target YANVY-Installer
 ```
 
 安装包必须与对应源码、第三方组合源码及许可证一并提供。对应源码包含现有词库原文件，以及该 SDK 的 librime、插件、依赖和构建脚本；保留各自原许可。
 
-对外提供原生 `YANVY-Installer.exe` 入口，不能直接分发内部 NSIS 载荷。主界面以普通权限打开，用户点击安装/卸载后才通过正常 UAC 启动嵌入式工作进程；E 盘可用时优先使用 E 盘临时目录，否则使用系统临时目录，并在受保护的独立目录提取载荷。NSIS 执行期间原生 UI 保持响应，完成状态来自真实退出结果，未显示虚构百分比。NSIS 编译参数使用绝对 Windows 反斜线路径。
+对外提供原生 `YANVY-Installer.exe` 入口，不能直接分发内部 NSIS 载荷。主界面以普通权限打开，先在所选空目录准备离线词库，再通过正常 UAC 安装机器组件。词库载荷不含可执行文件；管理员载荷、工作目录和临时解包位置均位于严格验证的 Program Files 保护树内，不在用户可写目录下执行。普通用户临时文件优先使用 E 盘。NSIS 执行期间原生 UI 保持响应，完成状态来自真实退出结果。NSIS 编译参数使用绝对 Windows 反斜线路径。
 
 版本号来自根目录 `version.json`，同时进入 CMake、PE 元数据、安装器和对应源码清单，避免仅修改外层文件名。
 
-TSF 全局注册需要正常的 Windows 管理员授权，涉及 Windows 管理的系统注册表。安装器可选择本地普通目录，包括 Program Files；不可覆盖非空目录或使用网络路径、重解析点。用户设置和词库缓存独立保存：若 E:\Codex\Programs 存在且可写，优先放在 E:\Codex\Programs\YANVY-UserData\用户 SID；否则使用当前用户 LocalAppData\YANVY（通常在系统盘）。不强改默认输入法，不通过全局键盘钩子、剪贴板或模拟粘贴提交文字。引擎运行后可单击通知区的“言舟设置”图标，或右键打开菜单。图标可能在隐藏图标区域；Windows 自身的输入法标识是另一个控件。
+TSF 全局注册需要正常的 Windows 管理员授权，涉及 Windows 管理的系统注册表。机器 EXE/DLL 固定放在系统提供的 64 位 Program Files\YANVY\版本号；词库位置可自由选择普通用户可写的本地空目录，不覆盖已有文件，不使用网络路径或重解析点。设置和编译缓存独立保存：若 E:\Codex\Programs 存在且可写，优先放在 E:\Codex\Programs\YANVY-UserData\用户 SID；否则使用当前用户 LocalAppData\YANVY。管理员进程不能直接在该目录启动引擎；启动时降到相同用户的普通权限。其他 Windows 账户无法访问所选词库位置时使用受保护的固定备份。不强改默认输入法，不通过全局键盘钩子、剪贴板或模拟粘贴提交文字。引擎运行后可单击通知区图标，或右键打开“言舟设置”。
 
 ## 实测边界
 

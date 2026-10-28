@@ -1,4 +1,4 @@
-﻿; SPDX-License-Identifier: GPL-3.0-or-later
+; SPDX-License-Identifier: GPL-3.0-or-later
 Unicode true
 !include "LogicLib.nsh"
 !include "x64.nsh"
@@ -11,25 +11,25 @@ Unicode true
 !include "${STAGE}-version.nsh"
 Name "言舟 · YANVY ${YANVY_VERSION}"
 OutFile "${OUTPUT}"
-InstallDir "$LOCALAPPDATA\Programs\YANVY\${YANVY_VERSION}"
+InstallDir "$PROGRAMFILES64\YANVY\${YANVY_VERSION}"
 ; The public native bootstrap requests UAC, sets a protected temp, then launches this
 ; internal payload with its elevated token and inherited environment.
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetDatablockOptimize on
 CRCCheck force
-BrandingText "IDEORIN · 开发测试版 / 未签名"
+BrandingText "IDEORIN · 免费开源 / 未签名"
 Icon "..\..\..\assets\brand\yanvy.ico"
 UninstallIcon "..\..\..\assets\brand\yanvy.ico"
 ShowInstDetails show
 ShowUninstDetails show
 VIProductVersion "${YANVY_WINDOWS_VERSION}"
 VIAddVersionKey /LANG=1033 "ProductName" "YANVY"
-VIAddVersionKey /LANG=1033 "FileDescription" "YANVY Windows x64 developer test installer"
+VIAddVersionKey /LANG=1033 "FileDescription" "YANVY Windows x64 installer"
 VIAddVersionKey /LANG=1033 "FileVersion" "${YANVY_VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "YANVY contributors; upstream licenses preserved"
 LicenseData "${STAGE}\TESTING.txt"
-LicenseText "请先阅读本测试包的范围、操作和卸载说明。继续安装即表示你已了解这是开发测试版。"
+LicenseText "言舟免费开源。请阅读安装、使用、卸载和许可证说明。"
 Page license
 Page directory
 Page instfiles
@@ -41,51 +41,8 @@ Var RegistrationAttempted
 Var FailureCode
 Var RemovalFailed
 Var CleanupWarning
-
-; Migrate bounded preferences only. Never copy an old Rime
-; profile, dictionaries, caches or arbitrary keys into the new installation.
-Function MigrateAppearance
-  ${If} $PreviousDir == ""
-    Return
-  ${EndIf}
-  IfFileExists "$PreviousDir\YANVY-INSTALL-MARKER.txt" 0 migration_done
-  ReadINIStr $0 "$PreviousDir\settings.ini" "display" "font_size"
-  IntFmt $1 "%u" $0
-  ${If} $0 == $1
-  ${AndIf} $0 >= 12
-  ${AndIf} $0 <= 32
-    WriteINIStr "$INSTDIR\settings.ini" "display" "font_size" $0
-  ${EndIf}
-  ReadINIStr $0 "$PreviousDir\settings.ini" "display" "theme"
-  IntFmt $1 "%u" $0
-  ${If} $0 == $1
-  ${AndIf} $0 >= 0
-  ${AndIf} $0 <= 2
-    WriteINIStr "$INSTDIR\settings.ini" "display" "theme" $0
-  ${EndIf}
-  ReadINIStr $0 "$PreviousDir\settings.ini" "input" "schema"
-  IntFmt $1 "%u" $0
-  ${If} $0 == $1
-  ${AndIf} $0 >= 0
-  ${AndIf} $0 <= 4
-    WriteINIStr "$INSTDIR\settings.ini" "input" "schema" $0
-  ${EndIf}
-  ReadINIStr $0 "$PreviousDir\settings.ini" "input" "pinyin_schema"
-  IntFmt $1 "%u" $0
-  ${If} $0 == $1
-  ${AndIf} $0 >= 1
-  ${AndIf} $0 <= 4
-    WriteINIStr "$INSTDIR\settings.ini" "input" "pinyin_schema" $0
-  ${EndIf}
-  ReadINIStr $0 "$PreviousDir\settings.ini" "input" "double_schema"
-  IntFmt $1 "%u" $0
-  ${If} $0 == $1
-  ${AndIf} $0 >= 2
-  ${AndIf} $0 <= 4
-    WriteINIStr "$INSTDIR\settings.ini" "input" "double_schema" $0
-  ${EndIf}
-  migration_done:
-FunctionEnd
+Var DataDir
+Var LegacyProfile
 
 Function .onInit
   ReadEnvStr $0 "YANVY_SETUP_TEMP_READY"
@@ -98,31 +55,50 @@ Function .onInit
   ${IfNot} ${IsNativeAMD64}
     SetErrorLevel 50
     IfSilent +2
-    MessageBox MB_OK|MB_ICONSTOP "此测试包只支持 Windows x64，不支持 32 位或 ARM64 Windows。"
+    MessageBox MB_OK|MB_ICONSTOP "本安装包只支持 Windows x64，不支持 32 位或 ARM64 Windows。"
     Abort
   ${EndIf}
   SetRegView 64
   SetShellVarContext all
+  ; The privileged payload never installs code into a user-chosen directory.
+  StrCmp $INSTDIR "$PROGRAMFILES64\YANVY\${YANVY_VERSION}" +3
+    SetErrorLevel 41
+    Abort
+  ReadEnvStr $DataDir "YANVY_DATA_LOCATION"
   ReadRegStr $PreviousDir HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "InstallLocation"
   ReadRegStr $PreviousVersion HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayVersion"
 FunctionEnd
 
-Section "言舟 Windows TSF 开发测试"
+Section "言舟 Windows 输入法"
   StrCpy $RegistrationAttempted 0
+  StrCpy $LegacyProfile 1
   StrCpy $FailureCode 20
   SetRegView 64
   SetShellVarContext all
   ; Never replace an arbitrary directory that merely happens to share a name.
   IfFileExists "$INSTDIR\YANVY-INSTALL-MARKER.txt" existing_owned
-  IfFileExists "$INSTDIR\*.*" 0 install_files
+  ; FindFirst returns dot entries for an empty existing directory. The native
+  ; worker pre-creates this protected directory, so existence is not nonempty.
+  FindFirst $1 $2 "$INSTDIR\*"
+  directory_next:
+    StrCmp $2 "" directory_empty
+    StrCmp $2 "." directory_continue
+    StrCmp $2 ".." directory_continue
+    FindClose $1
     SetErrorLevel 10
     IfSilent +2
     MessageBox MB_OK|MB_ICONSTOP "请选择新的空目录。安装程序不会覆盖已有目录中的文件。"
     Abort
+  directory_continue:
+    FindNext $1 $2
+    Goto directory_next
+  directory_empty:
+    FindClose $1
+    Goto install_files
   existing_owned:
-    SetErrorLevel 10
+    SetErrorLevel 11
     IfSilent +2
-    MessageBox MB_OK|MB_ICONINFORMATION "这个开发版本已经安装。请先卸载，或选择新的空目录；旧配置不会被静默覆盖。"
+    MessageBox MB_OK|MB_ICONINFORMATION "当前版本已经安装。可以直接使用，或先卸载后重新安装；个人设置会保留。"
     Abort
   install_files:
   StrCpy $FailureCode 21
@@ -184,6 +160,8 @@ Section "言舟 Windows TSF 开发测试"
   ClearErrors
   WriteUninstaller "$INSTDIR\Uninstall-core.exe"
   IfErrors rollback
+  ; The legacy identity remains intact until every new-install step succeeds.
+  ExecWait '"$INSTDIR\YANVY-Setup.exe" --has-legacy-profile' $LegacyProfile
   StrCpy $FailureCode 30
   StrCpy $RegistrationAttempted 1
   ClearErrors
@@ -194,7 +172,9 @@ Section "言舟 Windows TSF 开发测试"
     MessageBox MB_OK|MB_ICONSTOP "Windows TSF 注册失败。请确认已允许管理员授权；安装程序将回退此次注册。"
     Goto rollback
   ${EndIf}
-  Call MigrateAppearance
+  ; Data has been extracted by the original, unelevated user. Only this
+  ; pointer is stored here; the administrator worker never writes that path.
+  WriteINIStr "$INSTDIR\installation.ini" "paths" "data_root" "$DataDir"
   ReadEnvStr $0 "YANVY_SETUP_SCHEMA"
   IntFmt $1 "%u" $0
   ${If} $0 == $1
@@ -209,11 +189,11 @@ Section "言舟 Windows TSF 开发测试"
     ${EndIf}
   ${EndIf}
   ClearErrors
-  CreateDirectory "$SMPROGRAMS\言舟 YANVY 开发测试"
-  CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk" "$INSTDIR\YANVY-Settings.exe"
-  CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk" "$INSTDIR\YANVY-Server.exe" "--serve"
-  CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\测试说明.lnk" "$INSTDIR\TESTING.txt"
-  CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\卸载.lnk" "$INSTDIR\Uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\言舟 YANVY"
+  CreateShortcut "$SMPROGRAMS\言舟 YANVY\言舟设置.lnk" "$INSTDIR\YANVY-Settings.exe"
+  CreateShortcut "$SMPROGRAMS\言舟 YANVY\启动言舟引擎.lnk" "$INSTDIR\YANVY-Server.exe" "--serve"
+  CreateShortcut "$SMPROGRAMS\言舟 YANVY\使用说明.lnk" "$INSTDIR\TESTING.txt"
+  CreateShortcut "$SMPROGRAMS\言舟 YANVY\卸载.lnk" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayName" "言舟 · YANVY ${YANVY_VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayVersion" "${YANVY_VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "Publisher" "IDEORIN / fengyuan0601-prog"
@@ -228,19 +208,27 @@ Section "言舟 Windows TSF 开发测试"
   ; uninstaller: it could unregister the new version. Preserve settings and
   ; unknown files; locked components are scheduled for removal on restart.
   StrCpy $CleanupWarning 0
+  ; Retire only the known development shortcuts after a successful install.
+  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk"
+  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk"
+  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\测试说明.lnk"
+  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\卸载.lnk"
+  RMDir "$SMPROGRAMS\言舟 YANVY 开发测试"
+  ClearErrors
+  ExecWait '"$INSTDIR\YANVY-Setup.exe" --retire-legacy --machine' $0
+  ${If} ${Errors}
+    StrCpy $CleanupWarning 1
+  ${ElseIf} $0 != 0
+    StrCpy $CleanupWarning 1
+  ${EndIf}
   ${If} $PreviousDir != ""
   ${AndIf} $PreviousDir != $INSTDIR
-    ; Signal known older broker generations using the new trusted helper.
-    ; This avoids leaving an old notification icon beside the new one.
-    ClearErrors
-    ExecWait '"$INSTDIR\YANVY-Setup.exe" --stop-previous-brokers' $0
-    IfErrors old_broker_warning
-    ${If} $0 != 0
-      old_broker_warning:
-      StrCpy $CleanupWarning 1
+    ; Recheck the complete protected path before deleting old machine files.
+    ExecWait '"$INSTDIR\YANVY-Setup.exe" --validate-previous-cleanup "$PreviousDir"' $0
+    ${If} ${Errors}
+      StrCpy $0 1
     ${EndIf}
-    ReadEnvStr $0 "YANVY_PREVIOUS_CAN_CLEAN"
-    ${If} $0 == "1"
+    ${If} $0 == 0
       IfFileExists "$PreviousDir\YANVY-INSTALL-MARKER.txt" 0 old_cleanup_unsafe
       ClearErrors
       FileOpen $1 "$PreviousDir\YANVY-INSTALL-MARKER.txt" r
@@ -252,6 +240,7 @@ Section "言舟 Windows TSF 开发测试"
       StrCpy $R9 $INSTDIR
       StrCpy $INSTDIR $PreviousDir
       !include "${STAGE}-uninstall.nsh"
+      Delete /REBOOTOK "$INSTDIR\installation.ini"
       Delete /REBOOTOK "$INSTDIR\Uninstall-core.exe"
       Delete /REBOOTOK "$INSTDIR\profile\user.yaml"
       Delete /REBOOTOK "$INSTDIR\profile\installation.yaml"
@@ -285,7 +274,7 @@ Section "言舟 Windows TSF 开发测试"
     ${EndIf}
   ${EndIf}
   DetailPrint "安装完成。请从开始菜单启动言舟引擎，再在正常应用里选择言舟输入法。"
-  DetailPrint "未更改系统默认输入法。测试前请重新打开目标应用。"
+  DetailPrint "未更改系统默认输入法。请在系统输入法列表中选择言舟。"
   DetailPrint "升级后请使用本版本的卸载入口，不要运行旧版本文件夹里的卸载程序。"
   ${If} $CleanupWarning == 1
     SetErrorLevel 33
@@ -302,19 +291,28 @@ Section "言舟 Windows TSF 开发测试"
     ${If} $RegistrationAttempted == 1
       StrCpy $RemovalFailed 0
       ClearErrors
-      ExecWait '"$INSTDIR\YANVY-Setup.exe" --unregister --machine' $0
+      ExecWait '"$INSTDIR\YANVY-Setup.exe" --unregister-current --machine' $0
       ${If} ${Errors}
         StrCpy $RemovalFailed 1
       ${ElseIf} $0 != 0
         StrCpy $RemovalFailed 1
       ${EndIf}
       ${If} $PreviousDir != ""
-        IfFileExists "$PreviousDir\YANVY-Setup.exe" 0 rollback_incomplete
         ClearErrors
-        ExecWait '"$PreviousDir\YANVY-Setup.exe" --register --machine' $0
-        IfErrors rollback_incomplete
-        ${If} $0 != 0
-          Goto rollback_incomplete
+        ; Restore registration with the CURRENT trusted helper. Never execute
+        ; a previous directory's program under this administrator token.
+        ${If} $LegacyProfile == 0
+          ; The old CLSID/profile was never modified. Do not re-register a
+          ; legacy user-writable DLL, and never execute its helper.
+          ${If} $RemovalFailed == 1
+            Goto rollback_incomplete
+          ${EndIf}
+        ${Else}
+          ExecWait '"$INSTDIR\YANVY-Setup.exe" --restore-registration --machine "$PreviousDir"' $0
+          IfErrors rollback_incomplete
+          ${If} $0 != 0
+            Goto rollback_incomplete
+          ${EndIf}
         ${EndIf}
         ; Only claim recovery after the previous registration succeeded. If
         ; restoration is rejected retain both versions for a deliberate repair.
@@ -324,11 +322,11 @@ Section "言舟 Windows TSF 开发测试"
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayName" "言舟 · YANVY $PreviousVersion"
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "UninstallString" '$\"$PreviousDir\Uninstall.exe$\"'
         WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "DisplayIcon" "$PreviousDir\YANVY-Settings.exe"
-        CreateDirectory "$SMPROGRAMS\言舟 YANVY 开发测试"
-        CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk" "$PreviousDir\YANVY-Settings.exe"
-        CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk" "$PreviousDir\YANVY-Server.exe" "--serve"
-        CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\测试说明.lnk" "$PreviousDir\TESTING.txt"
-        CreateShortcut "$SMPROGRAMS\言舟 YANVY 开发测试\卸载.lnk" "$PreviousDir\Uninstall.exe"
+        CreateDirectory "$SMPROGRAMS\言舟 YANVY"
+        CreateShortcut "$SMPROGRAMS\言舟 YANVY\言舟设置.lnk" "$PreviousDir\YANVY-Settings.exe"
+        CreateShortcut "$SMPROGRAMS\言舟 YANVY\启动言舟引擎.lnk" "$PreviousDir\YANVY-Server.exe" "--serve"
+        CreateShortcut "$SMPROGRAMS\言舟 YANVY\使用说明.lnk" "$PreviousDir\TESTING.txt"
+        CreateShortcut "$SMPROGRAMS\言舟 YANVY\卸载.lnk" "$PreviousDir\Uninstall.exe"
         IfErrors rollback_incomplete
       ${Else}
         ${If} $RemovalFailed == 1
@@ -336,14 +334,34 @@ Section "言舟 Windows TSF 开发测试"
         ${EndIf}
         ClearErrors
         DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev"
-        Delete "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk"
-        Delete "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk"
-        Delete "$SMPROGRAMS\言舟 YANVY 开发测试\测试说明.lnk"
-        Delete "$SMPROGRAMS\言舟 YANVY 开发测试\卸载.lnk"
-        RMDir "$SMPROGRAMS\言舟 YANVY 开发测试"
+        Delete "$SMPROGRAMS\言舟 YANVY\言舟设置.lnk"
+        Delete "$SMPROGRAMS\言舟 YANVY\启动言舟引擎.lnk"
+        Delete "$SMPROGRAMS\言舟 YANVY\使用说明.lnk"
+        Delete "$SMPROGRAMS\言舟 YANVY\卸载.lnk"
+        RMDir "$SMPROGRAMS\言舟 YANVY"
       ${EndIf}
     ${EndIf}
     !include "${STAGE}-uninstall.nsh"
+    ; --check creates only these fixed deployment caches. Remove them on a
+    ; recovered failure so a retry can reuse the protected version directory.
+    Delete "$INSTDIR\profile\user.yaml"
+    Delete "$INSTDIR\profile\installation.yaml"
+    Delete "$INSTDIR\profile\build\default.yaml"
+    !macro FailedCache schema
+      Delete "$INSTDIR\profile\build\${schema}.schema.yaml"
+      Delete "$INSTDIR\profile\build\${schema}.table.bin"
+      Delete "$INSTDIR\profile\build\${schema}.prism.bin"
+      Delete "$INSTDIR\profile\build\${schema}.reverse.bin"
+    !macroend
+    !insertmacro FailedCache "wubi86"
+    !insertmacro FailedCache "pinyin_simp"
+    !insertmacro FailedCache "stroke"
+    !insertmacro FailedCache "double_pinyin"
+    !insertmacro FailedCache "double_pinyin_flypy"
+    !insertmacro FailedCache "double_pinyin_mspy"
+    RMDir "$INSTDIR\profile\build"
+    RMDir "$INSTDIR\profile"
+    Delete "$INSTDIR\installation.ini"
     Delete "$INSTDIR\Uninstall-core.exe"
     RMDir "$INSTDIR"
     SetErrorLevel $FailureCode
@@ -400,6 +418,7 @@ Section "Uninstall"
   ExecWait '"$INSTDIR\YANVY-Server.exe" --stop' $0
   Sleep 600
   !include "${STAGE}-uninstall.nsh"
+  Delete "$INSTDIR\installation.ini"
   ; Remove only engine-generated fixed cache names; preserve unknown files
   ; and any manually-created settings.ini in the installation directory.
   Delete "$INSTDIR\profile\user.yaml"
@@ -425,11 +444,11 @@ Section "Uninstall"
   Delete "$INSTDIR\profile\build\double_pinyin_mspy.prism.bin"
   RMDir "$INSTDIR\profile\build"
   RMDir "$INSTDIR\profile"
-  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\言舟设置.lnk"
-  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\启动言舟引擎.lnk"
-  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\测试说明.lnk"
-  Delete "$SMPROGRAMS\言舟 YANVY 开发测试\卸载.lnk"
-  RMDir "$SMPROGRAMS\言舟 YANVY 开发测试"
+  Delete "$SMPROGRAMS\言舟 YANVY\言舟设置.lnk"
+  Delete "$SMPROGRAMS\言舟 YANVY\启动言舟引擎.lnk"
+  Delete "$SMPROGRAMS\言舟 YANVY\使用说明.lnk"
+  Delete "$SMPROGRAMS\言舟 YANVY\卸载.lnk"
+  RMDir "$SMPROGRAMS\言舟 YANVY"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev"
   Delete /REBOOTOK "$INSTDIR\Uninstall.exe"
   Delete /REBOOTOK "$INSTDIR\Uninstall-core.exe"

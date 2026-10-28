@@ -13,11 +13,17 @@
 #include <atomic>
 #include <algorithm>
 #include <new>
+#ifdef YANVY_TSF_HOST_FIXTURE
+#include "text_host_fixture.hpp"
+#endif
 
 using Microsoft::WRL::ComPtr;
 namespace {
 HINSTANCE module = nullptr;
 std::atomic<long> objects{0};
+#ifdef YANVY_TSF_HOST_FIXTURE
+yanvy::TextHostDiagnostics host_diagnostics;
+#endif
 
 class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     public ITfThreadMgrEventSink, public ITfThreadFocusSink,
@@ -47,6 +53,10 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   HRESULT STDMETHODCALLTYPE Activate(ITfThreadMgr* manager, TfClientId id) override { return ActivateEx(manager,id,0); }
   HRESULT STDMETHODCALLTYPE ActivateEx(ITfThreadMgr* manager, TfClientId id, DWORD) override {
+#ifdef YANVY_TSF_HOST_FIXTURE
+    // Never let an unconfigured test DLL connect to a production namespace.
+    if(yanvy::fixture_user_root.empty()||yanvy::test_object_suffix.empty())return E_UNEXPECTED;
+#endif
     if (!manager) return E_INVALIDARG;
     if (manager_) return E_UNEXPECTED;
     manager_ = manager; client_ = id;
@@ -62,6 +72,12 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       TF_PRESERVEDKEY shortcut{VK_SPACE,TF_MOD_CONTROL};
       const wchar_t description[]=L"言舟中英文切换";
       preserved_ = SUCCEEDED(keys->PreserveKey(client_,yanvy::kToggleEnglish,&shortcut,description,UINT(wcslen(description))));
+      if (preserved_) {
+        // Preserve the release as well: some hosts stop forwarding raw keyup
+        // after the keyboard compartment closes. Unrelated releases pass on.
+        TF_PRESERVEDKEY release{VK_SPACE,TF_MOD_ON_KEYUP|TF_MOD_IGNORE_ALL_MODIFIER};
+        preserved_release_ = SUCCEEDED(keys->PreserveKey(client_,yanvy::kToggleEnglishRelease,&release,description,UINT(wcslen(description))));
+      }
     }
     if (SUCCEEDED(hr)) hr = manager_->QueryInterface(IID_PPV_ARGS(&source));
     if (SUCCEEDED(hr)) hr = source->AdviseSink(IID_ITfThreadMgrEventSink, static_cast<ITfThreadMgrEventSink*>(this), &thread_cookie_);
@@ -70,11 +86,20 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     AttachInputMode();
     ComPtr<ITfDocumentMgr> document;
     if (SUCCEEDED(manager_->GetFocus(&document))) Bind(document.Get());
+#ifndef YANVY_MODE_FIXTURE
     yanvy::StartBroker(yanvy::ModuleDir(module));
+#endif
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.activations);
+#endif
     return S_OK;
   }
   HRESULT STDMETHODCALLTYPE Deactivate() override {
+    shortcut_held_ = false;
     if (!manager_) return S_OK;
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.deactivations);
+#endif
     if (mode_) { mode_->Detach(); mode_.Reset(); }
     Cancel(); Bind(nullptr);
     ComPtr<ITfSource> source;
@@ -86,30 +111,52 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     ComPtr<ITfKeystrokeMgr> keys;
     if (SUCCEEDED(manager_->QueryInterface(IID_PPV_ARGS(&keys)))) {
       if (preserved_) { TF_PRESERVEDKEY shortcut{VK_SPACE,TF_MOD_CONTROL};keys->UnpreserveKey(yanvy::kToggleEnglish,&shortcut); }
+      if (preserved_release_) { TF_PRESERVEDKEY release{VK_SPACE,TF_MOD_ON_KEYUP|TF_MOD_IGNORE_ALL_MODIFIER};keys->UnpreserveKey(yanvy::kToggleEnglishRelease,&release); }
       keys->UnadviseKeyEventSink(client_);
     }
-    preserved_=false;
+    preserved_=preserved_release_=false;
     manager_.Reset(); active_ = false;
     return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnSetFocus(BOOL foreground) override {
+    // A key-sink focus notification is not a Space release. Actual thread
+    // focus loss and deactivation have their own gesture-reset paths.
     if (!foreground) Cancel();
     return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnSetThreadFocus() override { RefreshPreference();return S_OK; }
-  HRESULT STDMETHODCALLTYPE OnKillThreadFocus() override { Cancel(); return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnKillThreadFocus() override {
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.thread_blur);
+#endif
+    shortcut_held_ = false; Cancel(); return S_OK;
+  }
   HRESULT STDMETHODCALLTYPE OnInitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
   HRESULT STDMETHODCALLTYPE OnUninitDocumentMgr(ITfDocumentMgr*) override { return S_OK; }
   HRESULT STDMETHODCALLTYPE OnPushContext(ITfContext*) override { Cancel(); return S_OK; }
   HRESULT STDMETHODCALLTYPE OnPopContext(ITfContext*) override { Cancel(); return S_OK; }
   HRESULT STDMETHODCALLTYPE OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) override {
-    Cancel(); Bind(focus);RefreshPreference();return S_OK;
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.document_focus);
+#endif
+    ComPtr<ITfContext> next;
+    if(focus)focus->GetTop(&next);
+    // Repeated notifications for the same context must not erase preedit.
+    // Real focus loss and a different top context still cancel before binding.
+    if(next.Get()!=context_.Get()){Cancel();BindContext(next.Get());}
+    RefreshPreference();return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnTestKeyDown(ITfContext* context, WPARAM key, LPARAM, BOOL* eaten) override {
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.test_down);
+#endif
     if (!eaten) return E_POINTER;
     *eaten = Interested(context,key); return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnKeyDown(ITfContext* context, WPARAM key, LPARAM lp, BOOL* eaten) override {
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.key_down);
+#endif
     if (!eaten) return E_POINTER;
     *eaten = FALSE;
     if (!Interested(context,key)) return S_OK;
@@ -119,7 +166,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       if (key == VK_SPACE && Down(VK_CONTROL)) {
         // Holding the shortcut must not toggle back on each autorepeat.
         // LPARAM bit 30 is the key's previous state, as for WM_KEYDOWN.
-        if (!(lp & (LPARAM(1) << 30))) ToggleInputMode();
+        if (!(lp & (LPARAM(1) << 30))) ToggleShortcut(true);
         *eaten = TRUE; return S_OK;
       }
       if (key == VK_F12 && Down(VK_CONTROL) && Down(VK_SHIFT)) {
@@ -138,19 +185,34 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     } catch (...) { Cancel(); }
     return S_OK;
   }
-  HRESULT STDMETHODCALLTYPE OnTestKeyUp(ITfContext*, WPARAM, LPARAM, BOOL* eaten) override {
+  HRESULT STDMETHODCALLTYPE OnTestKeyUp(ITfContext*, WPARAM key, LPARAM, BOOL* eaten) override {
     if (!eaten) return E_POINTER;
-    *eaten = FALSE; return S_OK;
+    // Request the release even when Ctrl was released before Space. Without
+    // this, a preserved key's repeats cannot be distinguished from a new press.
+    *eaten = key == VK_SPACE && shortcut_held_; return S_OK;
   }
-  HRESULT STDMETHODCALLTYPE OnKeyUp(ITfContext*, WPARAM, LPARAM, BOOL* eaten) override {
+  HRESULT STDMETHODCALLTYPE OnKeyUp(ITfContext*, WPARAM key, LPARAM, BOOL* eaten) override {
     if (!eaten) return E_POINTER;
-    *eaten = FALSE; return S_OK;
+    *eaten = key == VK_SPACE && shortcut_held_;
+    if (key == VK_SPACE) shortcut_held_ = false;
+    return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext* context, REFGUID key, BOOL* eaten) override {
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.preserved);
+#endif
     if (!eaten) return E_POINTER;
     *eaten = FALSE;
-    if (key == yanvy::kToggleEnglish && manager_ && !Disabled(context)) {
-      ToggleInputMode();*eaten=TRUE;
+    if (key == yanvy::kToggleEnglishRelease) {
+      *eaten = shortcut_held_;
+      shortcut_held_ = false;
+      return S_OK;
+    }
+    if (key == yanvy::kToggleEnglish && manager_ && !Disabled(context) &&
+        !Down(VK_SHIFT) && !Down(VK_MENU) && !Down(VK_LWIN) && !Down(VK_RWIN)) {
+      // A physical preserved key and the raw fallback share one press latch.
+      // A programmatically invoked command with no Space held is independent.
+      ToggleShortcut(Down(VK_SPACE)); *eaten=TRUE;
     }
     return S_OK;
   }
@@ -176,7 +238,12 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
             SUCCEEDED(range->CompareStart(ec,selection.range,TF_ANCHOR_START,&start)) && start <= 0 &&
             SUCCEEDED(range->CompareEnd(ec,selection.range,TF_ANCHOR_END,&end)) && end >= 0;
         selection.range->Release();
-        if (!covered) Cancel();
+        if (!covered) {
+#ifdef YANVY_TSF_HOST_FIXTURE
+          InterlockedIncrement(&host_diagnostics.selection_cancel);
+#endif
+          Cancel();
+        }
       }
     }
     return S_OK;
@@ -188,12 +255,17 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
 #ifdef YANVY_MODE_FIXTURE
   void BeginModeFixture(ITfThreadMgr* manager, TfClientId client) {
-    manager_ = manager; client_ = client; AttachInputMode();
+    manager_ = manager; client_ = client; preserved_release_=true; AttachInputMode();
   }
   void EndModeFixture() {
     if (mode_) { mode_->Detach(); mode_.Reset(); }
-    manager_.Reset();
+    manager_.Reset(); preserved_release_=false;
   }
+  void SeedPendingFocusFixture(ITfContext* context) {
+    RefreshPreference();BindContext(context);
+    last_.input[0]=last_.preedit[0]=L'n';
+  }
+  bool HasPendingFocusFixture() const { return last_.input[0]!=0&&last_.preedit[0]!=0; }
 #endif
  private:
   void AttachInputMode() {
@@ -209,6 +281,14 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     Cancel(); ascii_ = next_ascii;
     if (mode_) mode_->SetOpen(!next_ascii);
     Show(true);
+  }
+  void ToggleShortcut(bool physical) {
+    // If the host rejects release preservation, do not leave a latch that
+    // may never receive its release. The raw path still rejects autorepeats.
+    physical = physical && preserved_release_;
+    if (physical && shortcut_held_) return;
+    shortcut_held_ = physical;
+    ToggleInputMode();
   }
   static bool Down(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
   bool Disabled(ITfContext* context) {
@@ -281,6 +361,9 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   bool EnsureFocus() {
     if (active_) return true;
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.broker_focus);
+#endif
     yanvy::Response r;
     active_ = yanvy::Call(Request(yanvy::Op::Focus),r);
     if (!active_) yanvy::StartBroker(yanvy::ModuleDir(module));
@@ -296,6 +379,9 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
         client_,edit_order_,std::move(function),write);
   }
   void Cancel() {
+#ifdef YANVY_TSF_HOST_FIXTURE
+    InterlockedIncrement(&host_diagnostics.cancellations);
+#endif
     ++generation_; ClearEngine(); last_ = {}; candidates_.Hide();
     ComPtr<ITfComposition> old = composition_;
     ComPtr<ITfContext> context = context_;
@@ -444,7 +530,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   EditSessionOrder edit_order_;
   uint32_t schema_=1,preferred_schema_=1,last_pinyin_schema_=1;
   std::wstring preference_revision_;
-  bool ascii_=false,active_=false,applying_=false,preserved_=false;
+  bool ascii_=false,active_=false,applying_=false,preserved_=false,preserved_release_=false,shortcut_held_=false;
   RECT caret_{};
   yanvy::Response last_{};
   yanvy::CandidateWindow candidates_;
@@ -483,6 +569,34 @@ STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** out) {
   HRESULT hr = factory->QueryInterface(iid,out); factory->Release(); return hr;
 }
 STDAPI DllCanUnloadNow() { return objects == 0 ? S_OK : S_FALSE; }
+#ifdef YANVY_TSF_HOST_FIXTURE
+extern "C" HRESULT WINAPI YanvyGetTextHostDiagnostics(yanvy::TextHostDiagnostics* value,DWORD bytes) {
+  if(!value||bytes!=sizeof(*value))return E_INVALIDARG;
+  value->activations=InterlockedCompareExchange(&host_diagnostics.activations,0,0);
+  value->deactivations=InterlockedCompareExchange(&host_diagnostics.deactivations,0,0);
+  value->test_down=InterlockedCompareExchange(&host_diagnostics.test_down,0,0);
+  value->key_down=InterlockedCompareExchange(&host_diagnostics.key_down,0,0);
+  value->preserved=InterlockedCompareExchange(&host_diagnostics.preserved,0,0);
+  value->cancellations=InterlockedCompareExchange(&host_diagnostics.cancellations,0,0);
+  value->thread_blur=InterlockedCompareExchange(&host_diagnostics.thread_blur,0,0);
+  value->document_focus=InterlockedCompareExchange(&host_diagnostics.document_focus,0,0);
+  value->selection_cancel=InterlockedCompareExchange(&host_diagnostics.selection_cancel,0,0);
+  value->broker_focus=InterlockedCompareExchange(&host_diagnostics.broker_focus,0,0);
+  return S_OK;
+}
+extern "C" HRESULT WINAPI YanvyConfigureTextHost(const wchar_t* suffix,const wchar_t* user_root) {
+  if(objects.load()!=0||!suffix||!user_root)return E_UNEXPECTED;
+  const std::wstring selected_suffix=suffix;
+  const std::filesystem::path selected_root=user_root;
+  if(selected_suffix.size()!=32||!std::all_of(selected_suffix.begin(),selected_suffix.end(),[](wchar_t c){return(c>=L'0'&&c<=L'9')||(c>=L'a'&&c<=L'f');})||
+      selected_root.empty()||selected_root.lexically_normal()!=selected_root||!yanvy::PlainLocalPath(selected_root))return E_INVALIDARG;
+  GUID toggle{},release{};
+  if(FAILED(CoCreateGuid(&toggle))||FAILED(CoCreateGuid(&release)))return E_FAIL;
+  yanvy::fixture_user_root=selected_root;yanvy::test_object_suffix=selected_suffix;
+  yanvy::kToggleEnglish=toggle;yanvy::kToggleEnglishRelease=release;
+  return S_OK;
+}
+#endif
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
   if (reason == DLL_PROCESS_ATTACH) { module = instance; DisableThreadLibraryCalls(instance); }
   return TRUE;

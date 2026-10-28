@@ -5,13 +5,29 @@
 #include <msctf.h>
 #include "msctf_compat.hpp"
 #include "registration_flow.hpp"
+#include "machine_store.hpp"
 #include <wrl/client.h>
 #include <iostream>
 #include <algorithm>
+#include <cstring>
 
 using Microsoft::WRL::ComPtr;
 namespace {
 const GUID* const categories[] = { &GUID_TFCAT_TIP_KEYBOARD };
+template<class Function> Function LoadProcedure(HMODULE module,const char* name) {
+  const auto address=GetProcAddress(module,name);Function result=nullptr;
+  static_assert(sizeof(result)==sizeof(address));
+  std::memcpy(&result,&address,sizeof(result));return result;
+}
+HRESULT VerifyServiceIdentity(const std::filesystem::path& dll) {
+  HMODULE library=LoadLibraryExW(dll.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  if(!library)return HRESULT_FROM_WIN32(GetLastError());
+  using GetFactory=HRESULT(WINAPI*)(REFCLSID,REFIID,void**);
+  const auto get_factory=LoadProcedure<GetFactory>(library,"DllGetClassObject");
+  ComPtr<IClassFactory> factory;
+  const HRESULT hr=get_factory?get_factory(yanvy::kService,IID_PPV_ARGS(&factory)):E_NOINTERFACE;
+  factory.Reset();FreeLibrary(library);return hr;
+}
 HRESULT SetString(HKEY root, const std::wstring& path, const wchar_t* name, const std::wstring& value, REGSAM view=KEY_WOW64_64KEY) {
   HKEY key = nullptr;
   LSTATUS error = RegCreateKeyExW(root,path.c_str(),0,nullptr,0,KEY_WRITE|view,nullptr,&key,nullptr);
@@ -29,11 +45,14 @@ HRESULT DeleteComClass(HKEY hive, REGSAM view, const wchar_t* clsid=yanvy::kClsi
   if (error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND) return S_OK;
   return HRESULT_FROM_WIN32(error);
 }
-HRESULT Register(bool machine) {
-  const auto dll = yanvy::ModuleDir() / L"YANVY-TSF.dll";
-  const auto dll32 = yanvy::ModuleDir() / L"YANVY-TSF-x86.dll";
+[[maybe_unused]] HRESULT Register(bool machine, const std::filesystem::path& runtime = yanvy::ModuleDir()) {
+  const auto dll = runtime / L"YANVY-TSF.dll";
+  const auto dll32 = runtime / L"YANVY-TSF-x86.dll";
   std::error_code file_error;
-  if (!std::filesystem::is_regular_file(dll32,file_error)) return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  if (!std::filesystem::is_regular_file(dll,file_error)||!std::filesystem::is_regular_file(dll32,file_error)) return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  // A protected legacy directory can still contain an older, incompatible
+  // service CLSID. Verify the target before touching any working registration.
+  HRESULT identity=VerifyServiceIdentity(dll);if(FAILED(identity))return identity;
   const std::wstring key = std::wstring(L"Software\\Classes\\CLSID\\") + yanvy::kClsid;
   const HKEY hive = machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   HRESULT hr = SetString(hive,key,nullptr,yanvy::kName);
@@ -55,15 +74,6 @@ HRESULT Register(bool machine) {
     std::cout << "register_category=0x" << std::hex << static_cast<unsigned long>(hr) << '\n';
     if (FAILED(hr)) break;
   }
-  // Enabling the new profile does not choose it as the user's default.
-  if (SUCCEEDED(hr)) {
-    ComPtr<ITfInputProcessorProfiles> legacy;
-    hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&legacy));
-    if (SUCCEEDED(hr)) hr = legacy->EnableLanguageProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,TRUE);
-    std::cout << "enable_profile=0x" << std::hex << static_cast<unsigned long>(hr) << '\n';
-  }
-  if (SUCCEEDED(hr)) hr = SetString(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",L"YANVY-dev",
-      L"\"" + (yanvy::ModuleDir()/L"YANVY-Server.exe").wstring() + L"\" --serve");
   if (FAILED(hr)) {
     HRESULT cleanup = profiles ? profiles->UnregisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,0) : S_OK;
     if (SUCCEEDED(cleanup) && category) for (auto guid : categories) {
@@ -72,6 +82,16 @@ HRESULT Register(bool machine) {
     }
     if (SUCCEEDED(cleanup)) { DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY); }
   }
+  return hr;
+}
+[[maybe_unused]] HRESULT EnableUserProfile() {
+  // Called by the original unelevated installer UI, not its UAC worker.
+  HRESULT hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+  ComPtr<ITfInputProcessorProfiles> profiles;
+  if(SUCCEEDED(hr))hr=CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
+  if(SUCCEEDED(hr))hr=profiles->EnableLanguageProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,TRUE);
+  if(SUCCEEDED(hr))hr=SetString(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",L"YANVY-dev",
+      L"\""+(yanvy::ModuleDir()/L"YANVY-Server.exe").wstring()+L"\" --serve");
   return hr;
 }
 HRESULT FindGuid(IEnumGUID* list, REFGUID expected, bool& found) {
@@ -89,22 +109,33 @@ HRESULT RemovalResult(LSTATUS error) {
   if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return S_OK;
   return HRESULT_FROM_WIN32(error);
 }
+HRESULT ProfilePresent(REFCLSID service, REFGUID profile, bool& present) {
+  present=false;ComPtr<ITfInputProcessorProfiles> profiles;
+  HRESULT hr=CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
+  ComPtr<IEnumTfLanguageProfiles> list;
+  if(SUCCEEDED(hr))hr=profiles->EnumLanguageProfiles(yanvy::kLanguage,&list);
+  if(FAILED(hr))return hr;
+  if(!list)return E_UNEXPECTED;
+  TF_LANGUAGEPROFILE value{};ULONG count=0;
+  for(;;){
+    hr=list->Next(1,&value,&count);if(FAILED(hr))return hr;
+    if(count==0)return S_OK;
+    if(value.clsid==service&&value.guidProfile==profile){present=true;return S_OK;}
+  }
+}
 struct RegistrationRemoval {
   bool machine;
+  const GUID* service=&yanvy::kService;
+  const GUID* profile=&yanvy::kProfile;
+  const wchar_t* clsid=yanvy::kClsid;
   HRESULT RemoveProfile() {
-    ComPtr<ITfInputProcessorProfiles> profiles;
-    HRESULT hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
-    if (FAILED(hr)) return hr;
-    ComPtr<IEnumGUID> list;
-    hr = profiles->EnumInputProcessorInfo(&list);
-    if (FAILED(hr)) return hr;
-    if (!list) return E_UNEXPECTED;
-    bool present = false;
-    hr = FindGuid(list.Get(),yanvy::kService,present);
+    bool present=false;HRESULT hr=ProfilePresent(*service,*profile,present);
     if (FAILED(hr) || !present) return hr;
     // Do not disable first: if removal is refused the existing profile must
     // remain usable. TSF's Unregister operation removes the service itself.
-    return profiles->Unregister(yanvy::kService);
+    ComPtr<ITfInputProcessorProfileMgr> profiles;
+    hr=CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
+    return SUCCEEDED(hr)?profiles->UnregisterProfile(*service,yanvy::kLanguage,*profile,0):hr;
   }
   HRESULT RemoveCategories() {
     ComPtr<ITfCategoryMgr> category;
@@ -112,14 +143,14 @@ struct RegistrationRemoval {
     if (FAILED(hr)) return hr;
     for (auto guid : categories) {
       ComPtr<IEnumGUID> list;
-      hr = category->EnumCategoriesInItem(yanvy::kService,&list);
+      hr = category->EnumCategoriesInItem(*service,&list);
       if (FAILED(hr)) return hr;
       if (!list) return E_UNEXPECTED;
       bool present = false;
       hr = FindGuid(list.Get(),*guid,present);
       if (FAILED(hr)) return hr;
       if (present) {
-        hr = category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
+        hr = category->UnregisterCategory(*service,*guid,*service);
         if (FAILED(hr)) return hr;
       }
     }
@@ -127,10 +158,13 @@ struct RegistrationRemoval {
   }
   HRESULT RemoveComServer() {
     HKEY hive=machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-    HRESULT hr=DeleteComClass(hive,KEY_WOW64_32KEY);
-    return SUCCEEDED(hr) ? DeleteComClass(hive,KEY_WOW64_64KEY) : hr;
+    HRESULT hr=DeleteComClass(hive,KEY_WOW64_32KEY,clsid);
+    return SUCCEEDED(hr) ? DeleteComClass(hive,KEY_WOW64_64KEY,clsid) : hr;
   }
   HRESULT RemoveStartup() {
+    // A machine uninstall can be authorized with another administrator's
+    // account. The original UI removes its own Run value separately.
+    if(machine)return S_OK;
     HKEY run = nullptr;
     LSTATUS error = RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,KEY_SET_VALUE,&run);
     if (error != ERROR_SUCCESS) return RemovalResult(error);
@@ -139,16 +173,21 @@ struct RegistrationRemoval {
     return RemovalResult(error);
   }
 };
-HRESULT Unregister(bool machine) {
+HRESULT RetireLegacy(bool machine) {
+  RegistrationRemoval removal{machine,&yanvy::kLegacyService,&yanvy::kLegacyProfile,yanvy::kLegacyClsid};
+  return yanvy::UnregisterTextService(removal);
+}
+[[maybe_unused]] HRESULT Unregister(bool machine, bool include_legacy=true) {
+  if(include_legacy){HRESULT hr=RetireLegacy(machine);if(FAILED(hr))return hr;}
   RegistrationRemoval removal{machine};
   return yanvy::UnregisterTextService(removal);
 }
-HRESULT StopPreviousBrokers(const std::wstring& sid, DWORD session) {
+[[maybe_unused]] HRESULT StopPreviousBrokers(const std::wstring& sid, DWORD session) {
   if (sid.empty()) return E_INVALIDARG;
   HRESULT result = S_OK;
   // rc.2/rc.3 use v2 and are covered by the current broker's legacy bridge.
   // Leaving their event out lets their engine survive upgrades indefinitely.
-  for (const auto version : {L"v2", L"v3", L"v4", L"v5", L"v6"}) {
+  for (const auto version : {L"v2", L"v3", L"v4", L"v5", L"v6", L"v7"}) {
     const auto name = std::wstring(L"Local\\Stop-YANVY-") + version + L"-" + sid + L"-" + std::to_wstring(session);
     HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, name.c_str());
     if (event) { if (!SetEvent(event)) result = HRESULT_FROM_WIN32(GetLastError()); CloseHandle(event); }
@@ -164,8 +203,33 @@ int wmain(int argc, wchar_t** argv) {
   const std::wstring option = argc > 1 ? argv[1] : L"--status";
   const bool machine = argc > 2 && std::wstring(argv[2]) == L"--machine";
   HRESULT hr = E_INVALIDARG;
-  if (option == L"--register") hr = Register(machine);
-  else if (option == L"--unregister") hr = Unregister(machine);
+  if (option == L"--register" && machine && argc==3) {
+    hr = yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    if(SUCCEEDED(hr))hr = Register(true);
+  }
+  else if (option == L"--restore-registration" && machine && argc==4) {
+    // Recovery runs this trusted helper, never a previous installation's exe.
+    // An old user-writable COM target is deliberately not reintroduced.
+    hr = yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    const auto previous=std::filesystem::path(argv[3]);
+    if(SUCCEEDED(hr))hr = yanvy::ValidateMachineRuntime(previous);
+    if(SUCCEEDED(hr))hr = Register(true,previous);
+  }
+  else if ((option == L"--unregister"||option==L"--unregister-current"||option==L"--retire-legacy") && machine && argc==3) {
+    hr = yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    if(SUCCEEDED(hr))hr = option==L"--retire-legacy"?RetireLegacy(true):Unregister(true,option==L"--unregister");
+  }
+  else if (option == L"--enable-user" && argc==2) hr=EnableUserProfile();
+  else if (option == L"--disable-user" && argc==2) {
+    hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    if(SUCCEEDED(hr)){RegistrationRemoval removal{false};hr=removal.RemoveStartup();}
+  }
+  else if (option == L"--validate-machine-runtime" && argc==3) hr=yanvy::ValidateMachineRuntime(std::filesystem::path(argv[2]));
+  else if (option == L"--validate-previous-cleanup" && argc==3) hr=yanvy::ValidatePreviousCleanup(std::filesystem::path(argv[2]));
+  else if (option == L"--has-legacy-profile" && argc==2) {
+    bool present=false;hr=ProfilePresent(yanvy::kLegacyService,yanvy::kLegacyProfile,present);
+    if(SUCCEEDED(hr)&&!present)hr=HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+  }
   else if (option == L"--stop-previous-brokers") {
     // Close the superseded per-user brokers after a successful upgrade so
     // their notification icons cannot coexist with the new one. Do not run
@@ -211,7 +275,7 @@ int wmain(int argc, wchar_t** argv) {
     hr = library ? S_OK : HRESULT_FROM_WIN32(GetLastError());
     if (library) {
       using GetFactory = HRESULT (WINAPI*)(REFCLSID,REFIID,void**);
-      auto factory_function = reinterpret_cast<GetFactory>(GetProcAddress(library,"DllGetClassObject"));
+      auto factory_function = LoadProcedure<GetFactory>(library,"DllGetClassObject");
       ComPtr<IClassFactory> factory;
       ComPtr<ITfTextInputProcessorEx> service;
       hr = factory_function ? factory_function(yanvy::kService,IID_PPV_ARGS(&factory)) : E_NOINTERFACE;
@@ -224,7 +288,7 @@ int wmain(int argc, wchar_t** argv) {
       if (service) service->Deactivate();
       composition.Reset(); keys.Reset(); service.Reset(); factory.Reset();
       using CanUnload = HRESULT (WINAPI*)();
-      auto can_unload = reinterpret_cast<CanUnload>(GetProcAddress(library,"DllCanUnloadNow"));
+      auto can_unload = LoadProcedure<CanUnload>(library,"DllCanUnloadNow");
       if (SUCCEEDED(hr) && (!can_unload || can_unload() != S_OK)) hr = E_UNEXPECTED;
       if (SUCCEEDED(hr)) FreeLibrary(library);
     }
