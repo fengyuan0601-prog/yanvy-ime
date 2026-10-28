@@ -77,8 +77,10 @@ LRESULT CALLBACK CandidateWindow::Proc(HWND window,UINT message,WPARAM wp,LPARAM
     if(message==WM_MOUSEMOVE||message==WM_LBUTTONUP){
       RECT bounds{};GetClientRect(window,&bounds);int index=self->view_.HitTest({GET_X_LPARAM(lp),GET_Y_LPARAM(lp)},bounds);
       bool schema=self->view_.HitSchema({GET_X_LPARAM(lp),GET_Y_LPARAM(lp)},bounds);
-      if(message==WM_LBUTTONUP&&schema){if(self->configure_)self->configure_();return 0;}
-      if(message==WM_LBUTTONUP){if(index>=0&&self->select_)self->select_(index);return 0;}
+      // A callback can refresh this window and replace its stored callbacks.
+      // Keep the invoked callable alive until it returns.
+      if(message==WM_LBUTTONUP&&schema){auto action=self->configure_;if(action)action();return 0;}
+      if(message==WM_LBUTTONUP){auto action=self->select_;if(index>=0&&action)action(index);return 0;}
       if(self->hover_!=index){self->hover_=index;InvalidateRect(window,nullptr,FALSE);}
       TRACKMOUSEEVENT track{sizeof(track),TME_LEAVE,window,0};TrackMouseEvent(&track);
       SetCursor(LoadCursorW(nullptr,index>=0||schema?IDC_HAND:IDC_ARROW));return 0;
