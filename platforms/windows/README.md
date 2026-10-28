@@ -1,8 +1,8 @@
 # Windows 原生开发测试
 
-版本：0.1.0-rc.8，Windows 10/11 x64 的 64 位桌面应用测试目标。**未签名候选版，不是稳定日用版。** 维护者此前已有真实输入试用反馈；本次新安装器和多方案输入的完整应用/升级卸载矩阵仍待完成。见 `docs/RC8-READINESS.md`；以前候选版记录保留。
+版本：0.1.0-rc.9，Windows 10/11 x64 的桌面应用测试目标。**未签名候选版，不是稳定日用版。** 维护者此前已有真实输入试用反馈；本次新安装器和多方案输入的完整应用/升级卸载矩阵仍待完成。见 `docs/RC9-READINESS.md`；以前候选版记录保留。
 
-当前只构建并注册 x64 TSF DLL，**暂不支持 32 位宿主应用**（包括 32 位 Office/WPS）；这需要后续补充 x86 前端，不能仅靠测试或重新安装解决。
+此版本为 Windows x64 系统同时提供 x64 与 x86 TSF 组件；32 位 Office/WPS 和其他真实应用尚未实测，不承诺所有应用可用。
 
 已有真实实现：TSF COM DLL、组合串编辑与取消、焦点 sink、跟随文本位置的 Win32 候选窗、数字选词/翻页、Ctrl+Space 中英切换、Ctrl+Shift+F12 五笔/全拼切换、受限字号/配色设置、单一 librime 引擎进程及 NSIS 安装卸载源码。
 
@@ -23,6 +23,8 @@ cmake -S platforms/windows -B build/windows -G Ninja -DCMAKE_BUILD_TYPE=Release 
 cmake --build build/windows
 ```
 
+另使用 32 位编译器和同一提交构建 `build/windows-x86` 的 `YANVY-TSF` 与 `YANVY-COM-Architecture-Fixture`，两者均需当前版本和提交元数据。CI 的 Win32 构建步骤给出完整示例。`rime.lib` 仅供配置，x86 目标不链接引擎；实际引擎仍为单个 x64 进程。
+
 下载脚本只在开发时显式使用，校验固定归档和 DLL 的 SHA-256，产品不使用该脚本。
 
 将 SDK 的 `rime.dll` 放到 `YANVY-Server.exe` 旁；诊断 CLI 的 DLL 放在其旁。用 `scripts/stage_data.py` 准备全新的 data/profile，再启动 `YANVY-Server.exe --serve`。`--stop` 只请求本用户当前登录会话的引擎退出。`YANVY-Setup.exe --com-smoke` 检查 COM ABI，不等于已注册系统输入法。
@@ -32,7 +34,7 @@ cmake --build build/windows
 先提交经过检查的源码。打包脚本拒绝脏工作树、非空目标目录或哈希不符的引擎；从受信源重新准备数据，不复制开发时的 profile、日志或缓存。
 
 ```powershell
-python scripts/package_windows.py --build build/windows --rime-sdk E:/Codex/Programs/YANVY-Rime-1.10.0-clang --stage E:/Codex/Temp/yanvy-stage-unique
+python scripts/package_windows.py --build build/windows --build-x86 build/windows-x86 --rime-sdk E:/Codex/Programs/YANVY-Rime-1.10.0-clang --stage E:/Codex/Temp/yanvy-stage-unique
 E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-payload.exe platforms/windows/installer/yanvy.nsi
 cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe
 cmake --build build/windows --target YANVY-Installer
@@ -52,6 +54,6 @@ TSF 全局注册需要正常的 Windows 管理员授权，涉及 Windows 管理�
 
 dev.2 使用原生候选窗和设置页，增加圆角、清楚的选中项/序号、字号与深浅色即时预览。设置页已实际检查 18/32 字号、切换主题、保存、重开与恢复默认；96/144/192 DPI 的实际绘制器渲染已检查，跨屏与真实文本位置尚待实测。详见 `docs/UI-DEV2.md`。
 
-升级先安装和注册新版，成功后清理系统记录中的旧版程序清单，不运行旧版卸载程序；旧设置与未知文件保留，若文件被占用则安排重启后移除。只有能够验证的旧版本目录才清理；无法验证时界面会明确提示。迁移旧安装的合法字号、配色和方案偏好，并以安装界面确认的默认方案为准。不复制旧引擎 profile 或缓存；v4 端点隔离旧版进程。完成后重开应用或注销再登录以加载新 DLL。
+升级先安装和注册新版，成功后清理系统记录中的旧版程序清单，不运行旧版卸载程序；旧设置与未知文件保留，若文件被占用则安排重启后移除。只有能够验证的旧版本目录才清理；无法验证时界面会明确提示。迁移旧安装的合法字号、配色和方案偏好，并以安装界面确认的默认方案为准。不复制旧引擎 profile 或缓存；新版引擎兼容已加载的旧版通信协议；旧组件本身仍可能保留旧行为，必要时重开应用或注销再登录。
 
-测试操作见 `TESTING.txt`。32 位应用、ARM64、UWP、安全桌面、休眠、升级以及微信/Office/WPS 兼容性目前没有通过记录。
+测试操作见 `TESTING.txt`。真实 32 位应用、ARM64、UWP、安全桌面、休眠、升级以及微信/Office/WPS 兼容性目前没有通过记录。

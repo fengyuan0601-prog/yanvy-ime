@@ -27,7 +27,7 @@ def main():
     base=a.temp_dir.resolve()/('yanvy-transaction-'+uuid.uuid4().hex)
     assert base.is_relative_to(a.temp_dir.resolve()) and not base.exists()
     base.mkdir(parents=True)
-    scenarios=('check-failure','check-crash','registration-failure','rollback-failure',
+    scenarios=('x86-check-failure','check-failure','check-crash','registration-failure','rollback-failure',
                'rollback-unregister-failure','success','unicode-success','unsafe-previous','uninstall-failure')
     if a.scenario and not set(a.scenario).issubset(scenarios):parser.error('Unknown scenario')
     for scenario in scenarios:
@@ -38,13 +38,14 @@ def main():
         def read_key(name):
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:return winreg.QueryValueEx(key,name)[0]
         for folder in (stage,old):
-            for name in ('YANVY-Server.exe','YANVY-Setup.exe','YANVY-Settings.exe','Uninstall.exe'):shutil.copy2(a.fixture_binary,folder/name)
+            for name in ('YANVY-Server.exe','YANVY-Setup.exe','YANVY-Settings.exe','YANVY-Check-x86.exe','Uninstall.exe'):shutil.copy2(a.fixture_binary,folder/name)
             (folder/'YANVY-INSTALL-MARKER.txt').write_text('YANVY fixture\n')
         (stage/'TESTING.txt').write_text('Synthetic NSIS transaction fixture only.\n')
         (old/'settings.ini').write_text('[display]\nfont_size=23\ntheme=2\nunknown=preserve-only-in-old\n',encoding='ascii')
         (old/'keep.txt').write_text('unrelated old file must survive')
         if scenario=='unsafe-previous':(old/'YANVY-INSTALL-MARKER.txt').unlink()
         if scenario=='check-failure':(stage/'check-result.txt').write_text('1')
+        if scenario=='x86-check-failure':(stage/'x86-check-result.txt').write_text('1')
         if scenario=='check-crash':(stage/'check-result.txt').write_text('-1073741795')  # 0xC000001D, simulated exception status
         if scenario in ('registration-failure','rollback-failure','rollback-unregister-failure'):
             (stage/'register-result.txt').write_text('1')
@@ -71,10 +72,10 @@ def main():
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(new)
         result=subprocess.run(install_command,env=env,timeout=30)
-        expected=0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
+        expected=23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
-        if scenario in ('check-failure','check-crash'):
+        if scenario in ('x86-check-failure','check-failure','check-crash'):
             assert not old_trace and read_key('InstallLocation')==str(old)
             assert (old/'YANVY-Setup.exe').exists() and (old/'Uninstall.exe').exists()
             assert not (new/'YANVY-Setup.exe').exists()

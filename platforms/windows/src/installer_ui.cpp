@@ -188,6 +188,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(message==WM_TIMER&&v->worker&&WaitForSingleObject(v->worker,0)==WAIT_OBJECT_0){KillTimer(window,1);GetExitCodeProcess(v->worker,&v->result);CloseHandle(v->worker);v->worker=nullptr;
     v->page=(v->result==0||v->result==3010||v->result==33)?2:3;
     bool scheme_ok=v->page!=2||v->uninstall||v->ApplySelectedSchema();
+    if(v->page==2&&!v->uninstall)StartBroker(v->target);
     v->status=v->page==2?(v->result==3010?L"旧版被占用的文件将在重启后清理；不会自动重启。":v->result==33?L"新版已安装，但旧版目录无法安全验证或清理，请保留旧目录并反馈。":L"任务已完成。"):
       v->result==10?L"目录已有文件，或不是有效的本地安装位置。":v->result==20?L"安装文件处理失败（20），请检查磁盘空间和权限。":
       v->result==21?L"安装文件解压失败（21），请检查磁盘空间和权限。":v->result==22?L"无法启动词库检查程序（22），请检查安全软件和系统权限。":

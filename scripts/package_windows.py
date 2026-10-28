@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 from stage_data import stage
 from release_version import VERSION, WINDOWS_VERSION, CHANNEL
@@ -17,6 +18,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--build",type=Path,required=True)
+    p.add_argument("--build-x86",type=Path,required=True)
     p.add_argument("--rime-sdk",type=Path,required=True)
     p.add_argument("--stage",type=Path,required=True)
     a=p.parse_args()
@@ -34,6 +36,20 @@ def main():
         if version_value(a.build/file,'SourceCommit')!=commit or version_value(a.build/file,'FileVersion')!=VERSION:
             raise SystemExit(f"Reconfigure and rebuild {file}: its source commit or version differs from HEAD.")
         shutil.copy2(a.build/file,a.stage/file)
+    x86=a.build_x86/"YANVY-TSF.dll"
+    if version_value(x86,'SourceCommit')!=commit or version_value(x86,'FileVersion')!=VERSION:
+        raise SystemExit("Reconfigure and rebuild the x86 TSF DLL from the current commit.")
+    pe=x86.read_bytes();offset=struct.unpack_from('<I',pe,0x3c)[0]
+    if pe[offset:offset+4]!=b'PE\0\0' or struct.unpack_from('<H',pe,offset+4)[0]!=0x014c:
+        raise SystemExit("The x86 TSF DLL is not a 32-bit Windows binary.")
+    shutil.copy2(x86,a.stage/"YANVY-TSF-x86.dll")
+    x86_probe=a.build_x86/"YANVY-COM-Architecture-Fixture.exe"
+    if version_value(x86_probe,'SourceCommit')!=commit or version_value(x86_probe,'FileVersion')!=VERSION:
+        raise SystemExit("Reconfigure and rebuild the x86 COM check from the current commit.")
+    pe=x86_probe.read_bytes();offset=struct.unpack_from('<I',pe,0x3c)[0]
+    if pe[offset:offset+4]!=b'PE\0\0' or struct.unpack_from('<H',pe,offset+4)[0]!=0x014c:
+        raise SystemExit("The x86 COM check is not a 32-bit Windows binary.")
+    shutil.copy2(x86_probe,a.stage/"YANVY-Check-x86.exe")
     shutil.copy2(dll,a.stage/"rime.dll")
     stage(a.stage/"data",a.stage/"profile")
     licenses=a.stage/"licenses"
@@ -69,6 +85,7 @@ def main():
               "rc6":"16 path checks; 35 broker checks with a simulated protected install directory; isolated user preference and tamper checks; 8 NSIS synthetic upgrade/rollback and 4 real-engine NSIS cases. Actual UAC installation and migration remain unverified. See docs/RC6-READINESS.md",
               "rc7":"Notification-icon version negotiation and event decoding, synthetic upgrade transaction, 35 isolated broker checks, and path checks. Actual taskbar interaction and system upgrade remain unverified. See docs/RC7-READINESS.md",
               "rc8":"Private real TSF compartment mode round trips; Windows real application hotkey interaction remains unverified. See docs/RC8-READINESS.md",
+              "rc9":"Legacy named-pipe compatibility and isolated x86 COM, mode and real-engine IPC tests. Real 32-bit and other application acceptance remains pending. See docs/RC9-READINESS.md",
               "current_system_upgrade_and_application_matrix":"NOT RUN; user installation and further real application verification required"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY "+VERSION+"\n"+commit+"\n",encoding="utf-8")

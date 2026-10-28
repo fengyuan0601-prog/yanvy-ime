@@ -108,11 +108,21 @@ inline std::wstring UserSid() {
   LocalFree(sid);
   return result;
 }
-inline std::wstring ObjectName(const wchar_t* prefix) {
+// Fixture suffix is compiled out of distributable binaries; it isolates
+// protocol tests from an installed broker in the user's desktop session.
+#ifdef YANVY_BROKER_FIXTURE
+inline std::wstring test_object_suffix;
+#endif
+inline std::wstring ObjectNameForVersion(const wchar_t* prefix, unsigned version) {
   DWORD session = 0;
   ProcessIdToSessionId(GetCurrentProcessId(), &session);
-  return std::wstring(prefix) + L"YANVY-v6-" + UserSid() + L"-" + std::to_wstring(session);
+  auto name = std::wstring(prefix) + L"YANVY-v" + std::to_wstring(version) + L"-" + UserSid() + L"-" + std::to_wstring(session);
+#ifdef YANVY_BROKER_FIXTURE
+  if (!test_object_suffix.empty()) name += L"-test-" + test_object_suffix;
+#endif
+  return name;
 }
+inline std::wstring ObjectName(const wchar_t* prefix) { return ObjectNameForVersion(prefix,7); }
 inline std::wstring PipeName() { return ObjectName(L"\\\\.\\pipe\\"); }
 // Bound both the connection and each IO operation. A failed engine never
 // leaves a host application waiting indefinitely for a keyboard response.

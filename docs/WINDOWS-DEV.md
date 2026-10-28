@@ -57,3 +57,5 @@ Windows 中文路径原来经过窄字符参数/本地编码，现通过 `wmain`
 rc.7 改进通知区设置入口和旧引擎退出，见 [rc.7 记录](RC7-READINESS.md)。
 
 rc.8 同步 TSF 输入法开关状态，见 [rc.8 记录](RC8-READINESS.md)。
+
+rc.9 增加旧版通信兼容与 32 位组件，见 [rc.9 记录](RC9-READINESS.md)。

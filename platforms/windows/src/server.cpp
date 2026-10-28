@@ -5,8 +5,10 @@
 #include "runtime_profile.hpp"
 #include "version.hpp"
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <shellapi.h>
+#include <cwctype>
 
 namespace {
 template<size_t N> void Copy(wchar_t (&dest)[N], const std::string& source) {
@@ -30,6 +32,63 @@ yanvy::Response Pack(const ime::Snapshot& state) {
   for (size_t i = 0; i < r.count; ++i) Copy(r.candidates[i], state.candidates[i]);
   return r;
 }
+// Serve older, ABI-compatible clients through the current broker. Each alias
+// uses the same per-user/session ACL and forwards in memory only. A still
+// running old broker keeps ownership of its pipe until it exits; no takeover.
+struct LegacyBridge {
+  unsigned version = 0;
+  HANDLE stop = nullptr;
+  SECURITY_ATTRIBUTES* security = nullptr;
+  HANDLE thread = nullptr;
+  static DWORD WINAPI Run(void* value) {
+    auto& self = *static_cast<LegacyBridge*>(value);
+    const auto name = yanvy::ObjectNameForVersion(L"\\\\.\\pipe\\",self.version);
+    while (WaitForSingleObject(self.stop,0) != WAIT_OBJECT_0) {
+      HANDLE pipe = CreateNamedPipeW(name.c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED|FILE_FLAG_FIRST_PIPE_INSTANCE,
+          PIPE_TYPE_MESSAGE|PIPE_READMODE_MESSAGE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,1,
+          sizeof(yanvy::Response),sizeof(yanvy::Request),500,self.security);
+      if (pipe == INVALID_HANDLE_VALUE) { if (WaitForSingleObject(self.stop,500)==WAIT_OBJECT_0) break; continue; }
+      OVERLAPPED ov{};ov.hEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+      if (!ov.hEvent) { CloseHandle(pipe); if (WaitForSingleObject(self.stop,500)==WAIT_OBJECT_0) break; continue; }
+      BOOL connected=ConnectNamedPipe(pipe,&ov);const DWORD error=GetLastError();
+      if (!connected&&error==ERROR_PIPE_CONNECTED) connected=TRUE;
+      if (!connected&&error==ERROR_IO_PENDING) {
+        HANDLE waiters[]={self.stop,ov.hEvent};
+        connected=WaitForMultipleObjects(2,waiters,FALSE,INFINITE)==WAIT_OBJECT_0+1;
+        if (!connected) { CancelIoEx(pipe,&ov);DWORD ignored=0;GetOverlappedResult(pipe,&ov,&ignored,TRUE); }
+      }
+      CloseHandle(ov.hEvent);
+      if (connected) {
+        yanvy::Request request;yanvy::Response response;
+        if (yanvy::Transfer(pipe,&request,sizeof(request),false,1000) &&
+            request.magic==yanvy::kMagic && request.version==yanvy::kProtocol && request.schema<ime::kSchemaCount) {
+          yanvy::Call(request,response);
+          if (yanvy::Transfer(pipe,&response,sizeof(response),true)) {
+            BYTE ack=0;yanvy::Transfer(pipe,&ack,sizeof(ack),false);
+          }
+        }
+      }
+      DisconnectNamedPipe(pipe);CloseHandle(pipe);
+    }
+    return 0;
+  }
+};
+struct LegacyBridges {
+  HANDLE stop;
+  std::array<LegacyBridge,5> items{};
+  bool Start(SECURITY_ATTRIBUTES* security) {
+    for (size_t i=0;i<items.size();++i) {
+      items[i].version=unsigned(i+2);items[i].stop=stop;items[i].security=security;
+      items[i].thread=CreateThread(nullptr,0,LegacyBridge::Run,&items[i],0,nullptr);
+      if (!items[i].thread) return false;
+    }
+    return true;
+  }
+  ~LegacyBridges() {
+    SetEvent(stop);
+    for (auto& item:items) if (item.thread) { WaitForSingleObject(item.thread,INFINITE);CloseHandle(item.thread); }
+  }
+};
 int Serve(const std::filesystem::path& test_profile = {}) {
   const auto sid = yanvy::UserSid();
   if (sid.empty()) return 2;
@@ -47,6 +106,7 @@ int Serve(const std::filesystem::path& test_profile = {}) {
     return 0;
   }
   HANDLE stop = CreateEventW(&sa, TRUE, FALSE, yanvy::ObjectName(L"Local\\Stop-").c_str());
+  if (!stop) { ReleaseMutex(singleton);CloseHandle(singleton);LocalFree(sd);return 3; }
   int result = 0;
   try {
     const auto root = yanvy::ModuleDir();
@@ -65,6 +125,8 @@ int Serve(const std::filesystem::path& test_profile = {}) {
     // Isolated protocol fixtures must not create an extra user-facing icon.
     std::unique_ptr<yanvy::TrayIcon> tray;
     if (test_profile.empty()) tray = std::make_unique<yanvy::TrayIcon>();
+    LegacyBridges bridges{stop};
+    if (!bridges.Start(&sa)) { SetEvent(stop);result=5; }
     GUID owner{};
     std::string schema = "wubi86";
     while (WaitForSingleObject(stop, 0) != WAIT_OBJECT_0) {
@@ -135,10 +197,21 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   const std::wstring option = argc > 1 ? argv[1] : L"--serve";
   std::filesystem::path test_profile;
 #ifdef YANVY_BROKER_FIXTURE
-  if(option==L"--serve-test"&&argc==3)test_profile=argv[2];
+  if(option==L"--serve-test"&&argc==4){test_profile=argv[2];yanvy::test_object_suffix=argv[3];}
+  if(option==L"--stop-test"&&argc==3)yanvy::test_object_suffix=argv[2];
+  if(option==L"--serve-test"||option==L"--stop-test") {
+    const auto& suffix=yanvy::test_object_suffix;
+    if (suffix.size()!=32 || !std::all_of(suffix.begin(),suffix.end(),[](wchar_t c){return (c>=L'0'&&c<=L'9')||(c>=L'a'&&c<=L'f');})) {
+      LocalFree(argv);return 1;
+    }
+  }
 #endif
   LocalFree(argv);
-  if (option == L"--stop") {
+  if (option == L"--stop"
+#ifdef YANVY_BROKER_FIXTURE
+      || (option == L"--stop-test" && !yanvy::test_object_suffix.empty())
+#endif
+  ) {
     HANDLE stop = OpenEventW(EVENT_MODIFY_STATE, FALSE, yanvy::ObjectName(L"Local\\Stop-").c_str());
     if (stop) { SetEvent(stop); CloseHandle(stop); }
     return 0;

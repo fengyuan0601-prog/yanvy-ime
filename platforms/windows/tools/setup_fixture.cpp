@@ -7,6 +7,10 @@
 int wmain(int argc,wchar_t** argv){
   wchar_t executable[32768]{};GetModuleFileNameW(nullptr,executable,32768);
   auto root=std::filesystem::path(executable).parent_path();
+  if(std::filesystem::path(executable).filename()==L"YANVY-Check-x86.exe") {
+    if(argc!=2)return 1;
+    int result=0;std::ifstream(root/L"x86-check-result.txt")>>result;return result;
+  }
   std::wstring option=argc>1?argv[1]:L"";std::string category;
   if(option==L"--check-dependencies"){
     auto probe=root/L"real-dependency-probe.exe";

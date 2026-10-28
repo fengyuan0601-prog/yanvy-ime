@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 import shutil
 import subprocess
+import uuid
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -16,7 +17,7 @@ def main():
     shutil.copytree(root/'profile',profile)
     patch=profile/'default.custom.yaml'
     changed=patch.read_bytes()+b'\n# synthetic modification\n';patch.write_bytes(changed)
-    result=subprocess.run([str(root/'YANVY-Broker-Fixture.exe'),'--serve-test',str(profile)],timeout=30)
+    result=subprocess.run([str(root/'YANVY-Broker-Fixture.exe'),'--serve-test',str(profile),uuid.uuid4().hex],timeout=30)
     assert result.returncode==5,result.returncode
     assert patch.read_bytes()==changed
     assert not any('userdb' in item.name for item in profile.rglob('*'))

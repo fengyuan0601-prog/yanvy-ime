@@ -12,22 +12,37 @@
 using Microsoft::WRL::ComPtr;
 namespace {
 const GUID* const categories[] = { &GUID_TFCAT_TIP_KEYBOARD };
-HRESULT SetString(HKEY root, const std::wstring& path, const wchar_t* name, const std::wstring& value) {
+HRESULT SetString(HKEY root, const std::wstring& path, const wchar_t* name, const std::wstring& value, REGSAM view=KEY_WOW64_64KEY) {
   HKEY key = nullptr;
-  LSTATUS error = RegCreateKeyExW(root,path.c_str(),0,nullptr,0,KEY_WRITE,nullptr,&key,nullptr);
+  LSTATUS error = RegCreateKeyExW(root,path.c_str(),0,nullptr,0,KEY_WRITE|view,nullptr,&key,nullptr);
   if (error != ERROR_SUCCESS) return HRESULT_FROM_WIN32(error);
   error = RegSetValueExW(key,name,0,REG_SZ,reinterpret_cast<const BYTE*>(value.c_str()),DWORD((value.size()+1)*sizeof(wchar_t)));
   RegCloseKey(key);
   return HRESULT_FROM_WIN32(error);
 }
+HRESULT DeleteComClass(HKEY hive, REGSAM view, const wchar_t* clsid=yanvy::kClsid) {
+  HKEY parent=nullptr;
+  LSTATUS error=RegOpenKeyExW(hive,L"Software\\Classes\\CLSID",0,KEY_READ|KEY_WRITE|view,&parent);
+  if (error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND) return S_OK;
+  if (error!=ERROR_SUCCESS) return HRESULT_FROM_WIN32(error);
+  error=RegDeleteTreeW(parent,clsid);RegCloseKey(parent);
+  if (error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND) return S_OK;
+  return HRESULT_FROM_WIN32(error);
+}
 HRESULT Register(bool machine) {
   const auto dll = yanvy::ModuleDir() / L"YANVY-TSF.dll";
+  const auto dll32 = yanvy::ModuleDir() / L"YANVY-TSF-x86.dll";
+  std::error_code file_error;
+  if (!std::filesystem::is_regular_file(dll32,file_error)) return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
   const std::wstring key = std::wstring(L"Software\\Classes\\CLSID\\") + yanvy::kClsid;
   const HKEY hive = machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   HRESULT hr = SetString(hive,key,nullptr,yanvy::kName);
   if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",nullptr,dll.wstring());
   if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",L"ThreadingModel",L"Apartment");
-  if (FAILED(hr)) return hr;
+  if (SUCCEEDED(hr)) hr = SetString(hive,key,nullptr,yanvy::kName,KEY_WOW64_32KEY);
+  if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",nullptr,dll32.wstring(),KEY_WOW64_32KEY);
+  if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",L"ThreadingModel",L"Apartment",KEY_WOW64_32KEY);
+  if (FAILED(hr)) { DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY);return hr; }
   ComPtr<ITfInputProcessorProfileMgr> profiles;
   hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
   if (SUCCEEDED(hr)) hr = profiles->RegisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,
@@ -55,7 +70,7 @@ HRESULT Register(bool machine) {
       cleanup = category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
       if (FAILED(cleanup)) break;
     }
-    if (SUCCEEDED(cleanup)) RegDeleteTreeW(hive,key.c_str());
+    if (SUCCEEDED(cleanup)) { DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY); }
   }
   return hr;
 }
@@ -111,8 +126,9 @@ struct RegistrationRemoval {
     return S_OK;
   }
   HRESULT RemoveComServer() {
-    const std::wstring key = std::wstring(L"Software\\Classes\\CLSID\\") + yanvy::kClsid;
-    return RemovalResult(RegDeleteTreeW(machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,key.c_str()));
+    HKEY hive=machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+    HRESULT hr=DeleteComClass(hive,KEY_WOW64_32KEY);
+    return SUCCEEDED(hr) ? DeleteComClass(hive,KEY_WOW64_64KEY) : hr;
   }
   HRESULT RemoveStartup() {
     HKEY run = nullptr;
@@ -128,6 +144,7 @@ HRESULT Unregister(bool machine) {
   return yanvy::UnregisterTextService(removal);
 }
 }
+#ifndef YANVY_SETUP_REGISTRY_FIXTURE
 int wmain(int argc, wchar_t** argv) {
   HRESULT init = CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
   if (FAILED(init)) return 1;
@@ -145,7 +162,7 @@ int wmain(int argc, wchar_t** argv) {
     if (sid.empty() || !ProcessIdToSessionId(GetCurrentProcessId(), &session)) hr = E_FAIL;
     else {
       hr = S_OK;
-      for (const auto version : {L"v3", L"v4", L"v5"}) {
+      for (const auto version : {L"v3", L"v4", L"v5", L"v6"}) {
         const auto name = std::wstring(L"Local\\Stop-YANVY-") + version + L"-" + sid + L"-" + std::to_wstring(session);
         HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, name.c_str());
         if (event) { if (!SetEvent(event)) hr = HRESULT_FROM_WIN32(GetLastError()); CloseHandle(event); }
@@ -211,3 +228,4 @@ int wmain(int argc, wchar_t** argv) {
   CoUninitialize();
   return SUCCEEDED(hr) ? 0 : 1;
 }
+#endif

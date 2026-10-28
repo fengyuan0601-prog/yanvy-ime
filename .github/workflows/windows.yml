@@ -20,6 +20,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item .deps/rime/dist/lib/rime.dll build/windows/Release
           Copy-Item .deps/rime/dist/lib/rime.dll build/windows/core/Release
+      - name: Build and inspect 32-bit TSF client
+        shell: pwsh
+        run: |
+          $sdk = (Resolve-Path .deps/rime/dist).Path.Replace('\','/')
+          cmake -S platforms/windows -B build/windows-x86 -G "Visual Studio 17 2022" -A Win32 "-DRIME_INCLUDE_DIR=$sdk/include" "-DRIME_LIBRARY=$sdk/lib/rime.lib"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/windows-x86 --config Release --target YANVY-TSF YANVY-COM-Architecture-Fixture YANVY-Broker-Architecture-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows-x86/Release/YANVY-COM-Architecture-Fixture.exe (Resolve-Path build/windows-x86/Release/YANVY-TSF.dll).Path
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows-x86/Release/YANVY-Input-Mode-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows-x86/Release/YANVY-TSF-Mode-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Core privacy and editing regressions
         shell: pwsh
         env:
@@ -28,7 +42,7 @@ jobs:
       - name: Render native candidate UI at three scales
         shell: pwsh
         run: |
-          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture
+          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-COM-Registry-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-UI-Render.exe --check-layout
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -41,6 +55,8 @@ jobs:
           & build/windows/Release/YANVY-Input-Mode-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-TSF-Mode-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-COM-Registry-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           foreach ($dpi in 96,144,192) {
             & build/windows/Release/YANVY-UI-Render.exe "build/windows/candidates-$dpi.png" $dpi
@@ -64,15 +80,18 @@ jobs:
           python scripts/stage_data.py --shared-dir build/windows/Release/data --user-dir build/windows/Release/profile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $userProfile = (Join-Path (Resolve-Path build/windows).Path 'broker-user-profile')
-          $server = Start-Process build/windows/Release/YANVY-Broker-Fixture.exe -ArgumentList '--serve-test',('"' + $userProfile + '"') -WindowStyle Hidden -PassThru
+          $testNamespace = [guid]::NewGuid().ToString('N')
+          $server = Start-Process build/windows/Release/YANVY-Broker-Fixture.exe -ArgumentList '--serve-test',('"' + $userProfile + '"'),$testNamespace -WindowStyle Hidden -PassThru
           try {
             Start-Sleep -Seconds 5
-            python tests/test_windows_broker.py --root build/windows/Release --profile-dir $userProfile --report build/windows/broker-results.json
+            python tests/test_windows_broker.py --root build/windows/Release --profile-dir $userProfile --report build/windows/broker-results.json --namespace $testNamespace
             $result = $LASTEXITCODE
           } finally {
-            & build/windows/Release/YANVY-Server.exe --stop
+            & build/windows/Release/YANVY-Broker-Fixture.exe --stop-test $testNamespace
             $server.WaitForExit(5000) | Out-Null
           }
           if ($result -ne 0) { exit $result }
           python tests/test_runtime_profile.py --root build/windows/Release --profile build/windows/tampered-user-profile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_legacy_bridge_conflict.py --root build/windows/Release --temp-dir build/windows --client-x86 build/windows-x86/Release/YANVY-Broker-Architecture-Fixture.exe
           exit $LASTEXITCODE

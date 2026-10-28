@@ -138,6 +138,13 @@ Section "言舟 Windows TSF 开发测试"
   ${If} $0 != 0
     Goto rollback
   ${EndIf}
+  ; Verify that the 32-bit loader can instantiate the packaged TSF component.
+  ClearErrors
+  ExecWait '"$INSTDIR\YANVY-Check-x86.exe" "$INSTDIR\YANVY-TSF-x86.dll"' $0
+  IfErrors rollback
+  ${If} $0 != 0
+    Goto rollback
+  ${EndIf}
   ; Warm the fixed data using synthetic input before system registration.
   StrCpy $FailureCode 22
   ClearErrors

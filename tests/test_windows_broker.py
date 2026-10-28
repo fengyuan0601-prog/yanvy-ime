@@ -29,7 +29,10 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--profile-dir", type=Path)
+    parser.add_argument("--namespace", required=True, help="Unique lowercase UUID for an isolated fixture broker")
     args = parser.parse_args()
+    if len(args.namespace)!=32 or any(ch not in '0123456789abcdef' for ch in args.namespace):
+        parser.error('namespace must be a lowercase 32-character hexadecimal UUID')
     k = c.WinDLL("kernel32", use_last_error=True)
     a = c.WinDLL("advapi32", use_last_error=True)
     k.GetCurrentProcess.restype = w.HANDLE
@@ -52,7 +55,8 @@ def main():
     assert a.ConvertSidToStringSidW(c.cast(data, c.POINTER(c.c_void_p))[0], c.byref(sid))
     session = w.DWORD()
     assert k.ProcessIdToSessionId(os.getpid(), c.byref(session))
-    pipe = rf"\\.\pipe\YANVY-v6-{sid.value}-{session.value}"
+    pipe_base = rf"\\.\pipe\YANVY-v{{}}-{sid.value}-{session.value}-test-{args.namespace}"
+    pipe = pipe_base.format(7)
     k.LocalFree(sid)
     k.CloseHandle(token)
     checks = []
@@ -62,11 +66,11 @@ def main():
             raise AssertionError(name)
         checks.append({"name": name, "status": "PASS"})
 
-    def call(owner, op, key=0, schema=0, raw_version=2):
+    def call(owner, op, key=0, schema=0, raw_version=2, endpoint=7):
         q = Request(MAGIC, raw_version, op, key, 0, schema, (c.c_ubyte * 16).from_buffer_copy(owner.bytes_le))
         handle = w.HANDLE(-1).value
         for _ in range(100):
-            handle = k.CreateFileW(pipe, 0xC0000000, 0, None, 3, 0, None)
+            handle = k.CreateFileW(pipe_base.format(endpoint), 0xC0000000, 0, None, 3, 0, None)
             if handle != w.HANDLE(-1).value:
                 break
             time.sleep(.02)
@@ -93,6 +97,15 @@ def main():
         time.sleep(.05)
     check("cross_arch_protocol_layout", c.sizeof(Request) == 40 and c.sizeof(Response) == 17444)
     one, two = uuid.uuid4(), uuid.uuid4()
+    for endpoint in range(2,7):
+        check(f"legacy_v{endpoint}_focus",call(one,1,schema=1,endpoint=endpoint).ok==1)
+        check(f"legacy_v{endpoint}_real_input",call(one,2,ord('n'),schema=1,endpoint=endpoint).input=='n')
+        check(f"legacy_v{endpoint}_shared_state",call(one,4,schema=1).input=='n')
+        call(one,3,schema=1,endpoint=endpoint)
+    check("legacy_owner_focus",call(one,1,schema=1,endpoint=3).ok==1)
+    call(one,2,ord('n'),schema=1,endpoint=4)
+    check("legacy_other_owner_clears",not call(two,1,schema=1,endpoint=5).input)
+    check("legacy_stale_owner_rejected",not call(one,2,ord('i'),schema=1,endpoint=6).ok)
     check("first_focus_has_no_old_composition", call(one, 1).input == "")
     for key in "wqvb":
         r = call(one, 2, ord(key))
