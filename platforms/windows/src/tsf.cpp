@@ -56,6 +56,11 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     ComPtr<ITfSource> source;
     HRESULT hr = manager_->QueryInterface(IID_PPV_ARGS(&keys));
     if (SUCCEEDED(hr)) hr = keys->AdviseKeyEventSink(client_, static_cast<ITfKeyEventSink*>(this), TRUE);
+    if (SUCCEEDED(hr)) {
+      TF_PRESERVEDKEY shortcut{VK_SPACE,TF_MOD_CONTROL};
+      const wchar_t description[]=L"言舟中英文切换";
+      preserved_ = SUCCEEDED(keys->PreserveKey(client_,yanvy::kToggleEnglish,&shortcut,description,UINT(wcslen(description))));
+    }
     if (SUCCEEDED(hr)) hr = manager_->QueryInterface(IID_PPV_ARGS(&source));
     if (SUCCEEDED(hr)) hr = source->AdviseSink(IID_ITfThreadMgrEventSink, static_cast<ITfThreadMgrEventSink*>(this), &thread_cookie_);
     if (SUCCEEDED(hr)) source->AdviseSink(IID_ITfThreadFocusSink, static_cast<ITfThreadFocusSink*>(this), &focus_cookie_);
@@ -75,7 +80,11 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     }
     thread_cookie_ = focus_cookie_ = TF_INVALID_COOKIE;
     ComPtr<ITfKeystrokeMgr> keys;
-    if (SUCCEEDED(manager_->QueryInterface(IID_PPV_ARGS(&keys)))) keys->UnadviseKeyEventSink(client_);
+    if (SUCCEEDED(manager_->QueryInterface(IID_PPV_ARGS(&keys)))) {
+      if (preserved_) { TF_PRESERVEDKEY shortcut{VK_SPACE,TF_MOD_CONTROL};keys->UnpreserveKey(yanvy::kToggleEnglish,&shortcut); }
+      keys->UnadviseKeyEventSink(client_);
+    }
+    preserved_=false;
     manager_.Reset(); active_ = false;
     return S_OK;
   }
@@ -130,9 +139,13 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (!eaten) return E_POINTER;
     *eaten = FALSE; return S_OK;
   }
-  HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext*, REFGUID, BOOL* eaten) override {
+  HRESULT STDMETHODCALLTYPE OnPreservedKey(ITfContext* context, REFGUID key, BOOL* eaten) override {
     if (!eaten) return E_POINTER;
-    *eaten = FALSE; return S_OK;
+    *eaten = FALSE;
+    if (key == yanvy::kToggleEnglish && manager_ && !Disabled(context)) {
+      Cancel();ascii_=!ascii_;Show(true);*eaten=TRUE;
+    }
+    return S_OK;
   }
   HRESULT STDMETHODCALLTYPE OnCompositionTerminated(TfEditCookie ec, ITfComposition* composition) override {
     if (composition_.Get() == composition) {
@@ -385,7 +398,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       auto q = Request(yanvy::Op::Key); q.key = uint32_t('1'+index);
       yanvy::Response r;
       if (!yanvy::Call(q,r) || !Apply(context_.Get(),r)) Cancel();
-    },[]{yanvy::OpenSettings(yanvy::ModuleDir(module));});
+    },[this]{Cancel();if(schema_){last_pinyin_schema_=schema_;schema_=0;}else schema_=last_pinyin_schema_;Show(true);});
   }
   LONG refs_ = 1;
   TfClientId client_ = TF_CLIENTID_NULL;
@@ -399,7 +412,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   EditSessionOrder edit_order_;
   uint32_t schema_=1,preferred_schema_=1,last_pinyin_schema_=1;
   std::wstring preference_revision_;
-  bool ascii_=false,active_=false,applying_=false;
+  bool ascii_=false,active_=false,applying_=false,preserved_=false;
   RECT caret_{};
   yanvy::Response last_{};
   yanvy::CandidateWindow candidates_;

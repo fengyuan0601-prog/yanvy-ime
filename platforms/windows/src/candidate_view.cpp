@@ -63,7 +63,7 @@ void CandidateView::Draw(HDC dc,RECT bounds,int hover){
   Label(dc,ascii_?L"英":L"中",mode,small_,ascii_?p.muted:p.accent,DT_CENTER);
   RECT schema_button{bounds.right-D(122),mode.top,mode.left-D(8),mode.bottom};
   Rounded(dc,schema_button,D(5),p.chip,p.chip);
-  auto schema_text=std::wstring(ime::kSchemaShortLabels[schema_])+L" ▾";
+  auto schema_text=std::wstring(ime::kSchemaShortLabels[schema_])+L" ⇄";
   Label(dc,schema_text.c_str(),schema_button,small_,p.accent,DT_CENTER);
   if(has_code_){
     RECT code{left+D(15),top+D(39),bounds.right-D(15),top+RowsTop()-D(4)};
