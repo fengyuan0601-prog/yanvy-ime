@@ -27,7 +27,7 @@ def main():
     assert base.is_relative_to(a.temp_dir.resolve()) and not base.exists()
     base.mkdir(parents=True)
     ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)
-    for name, expected in (('real-engine',0),('modified-data',29),('missing-engine-dll',23)):
+    for name, expected in (('real-engine',0),('real-upgrade',0),('modified-data',29),('missing-engine-dll',23)):
         root=base/('真实 引擎 '+name); stage=root/'stage'; target=root/'YANVY'/'0.1.0-rc.4'/'YANVY'/'test'
         shutil.copytree(a.stage,stage)
         shutil.copy2(a.server_binary,stage/'YANVY-Server.exe')
@@ -37,6 +37,15 @@ def main():
             with (stage/'data/default.yaml').open('ab') as f: f.write(b'\n# intentionally changed\n')
         if name=='missing-engine-dll': (stage/'rime.dll').unlink()
         key_path='Software\\YANVY-Installer-Fixture\\'+uuid.uuid4().hex
+        old=root/'old install'
+        if name=='real-upgrade':
+            old.mkdir();shutil.copy2(a.fixture_binary,old/'YANVY-Setup.exe')
+            (old/'YANVY-INSTALL-MARKER.txt').write_text('YANVY fixture\n')
+            (old/'settings.ini').write_text('[display]\nfont_size=23\n')
+            (old/'keep.txt').write_text('preserve')
+            with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_WRITE|winreg.KEY_WOW64_64KEY) as key:
+                winreg.SetValueEx(key,'InstallLocation',0,winreg.REG_SZ,str(old))
+                winreg.SetValueEx(key,'DisplayVersion',0,winreg.REG_SZ,'fixture-old')
         (root/'stage-version.nsh').write_text('!define YANVY_VERSION "0.1.0-rc.4"\n!define YANVY_WINDOWS_VERSION "0.1.0.6"\n')
         lines=['Delete /REBOOTOK "$INSTDIR\\'+str(f.relative_to(stage)).replace('/','\\')+'"' for f in stage.rglob('*') if f.is_file()]
         (root/'stage-uninstall.nsh').write_text('\n'.join(lines)+'\n')
@@ -48,7 +57,7 @@ def main():
         script=root/'test.nsi';script.write_text(source,encoding='utf-8-sig')
         installer=root/'test.exe'
         subprocess.run([str(a.makensis),'/V2',f'/DSTAGE={stage}',f'/DOUTPUT={installer}',str(script)],check=True,timeout=45)
-        env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
+        env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',YANVY_PREVIOUS_CAN_CLEAN='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
         try:
             result=subprocess.run(subprocess.list2cmdline([str(installer)])+' /S /D='+str(target),env=env,timeout=90)
             assert result.returncode==expected,(name,result.returncode,expected)
@@ -56,6 +65,9 @@ def main():
                 with winreg.OpenKey(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_READ|winreg.KEY_WOW64_64KEY) as key:
                     assert winreg.QueryValueEx(key,'InstallLocation')[0]==str(target)
                 assert (target/'profile/build/wubi86.schema.yaml').is_file()
+                if name=='real-upgrade':
+                    assert not (old/'YANVY-Setup.exe').exists()
+                    assert (old/'keep.txt').read_text()=='preserve' and (old/'settings.ini').exists()
             else:
                 assert not (target/'YANVY-Setup.exe').exists()
             assert not (root/'must-not-use-default').exists()

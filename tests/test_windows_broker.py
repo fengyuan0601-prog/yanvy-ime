@@ -28,6 +28,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--profile-dir", type=Path)
     args = parser.parse_args()
     k = c.WinDLL("kernel32", use_last_error=True)
     a = c.WinDLL("advapi32", use_last_error=True)
@@ -51,7 +52,7 @@ def main():
     assert a.ConvertSidToStringSidW(c.cast(data, c.POINTER(c.c_void_p))[0], c.byref(sid))
     session = w.DWORD()
     assert k.ProcessIdToSessionId(os.getpid(), c.byref(session))
-    pipe = rf"\\.\pipe\YANVY-v3-{sid.value}-{session.value}"
+    pipe = rf"\\.\pipe\YANVY-v4-{sid.value}-{session.value}"
     k.LocalFree(sid)
     k.CloseHandle(token)
     checks = []
@@ -130,7 +131,7 @@ def main():
         r = call(two, 2, ord(key))
     check("no_learning_candidate_order", r.candidates[0].value == "你好")
     call(two, 3)
-    profile = args.root / "profile"
+    profile = args.profile_dir if args.profile_dir else args.root / "profile"
     files = [p for p in profile.rglob("*") if p.is_file()]
     marker = "YANVY_SYNTHETIC_CANARY_582931"
     for key in marker:

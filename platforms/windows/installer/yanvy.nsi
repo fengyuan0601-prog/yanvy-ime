@@ -40,6 +40,7 @@ Var PreviousVersion
 Var RegistrationAttempted
 Var FailureCode
 Var RemovalFailed
+Var CleanupWarning
 
 ; Migrate bounded preferences only. Never copy an old Rime
 ; profile, dictionaries, caches or arbitrary keys into the new installation.
@@ -203,10 +204,69 @@ Section "言舟 Windows TSF 开发测试"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\YANVY-dev" "NoRepair" 1
   IfErrors rollback
+  ; New registration and metadata have succeeded. Only now clean exact owned
+  ; files from the previously registered, validated directory. Do not run its
+  ; uninstaller: it could unregister the new version. Preserve settings and
+  ; unknown files; locked components are scheduled for removal on restart.
+  StrCpy $CleanupWarning 0
+  ${If} $PreviousDir != ""
+  ${AndIf} $PreviousDir != $INSTDIR
+    ReadEnvStr $0 "YANVY_PREVIOUS_CAN_CLEAN"
+    ${If} $0 == "1"
+      IfFileExists "$PreviousDir\YANVY-INSTALL-MARKER.txt" 0 old_cleanup_unsafe
+      ClearErrors
+      FileOpen $1 "$PreviousDir\YANVY-INSTALL-MARKER.txt" r
+      IfErrors old_cleanup_unsafe
+      FileRead $1 $2
+      FileClose $1
+      StrCpy $2 $2 6
+      StrCmp $2 "YANVY " 0 old_cleanup_unsafe
+      StrCpy $R9 $INSTDIR
+      StrCpy $INSTDIR $PreviousDir
+      !include "${STAGE}-uninstall.nsh"
+      Delete /REBOOTOK "$INSTDIR\Uninstall-core.exe"
+      Delete /REBOOTOK "$INSTDIR\profile\user.yaml"
+      Delete /REBOOTOK "$INSTDIR\profile\installation.yaml"
+      Delete /REBOOTOK "$INSTDIR\profile\build\default.yaml"
+      !macro OldCache schema
+        Delete /REBOOTOK "$INSTDIR\profile\build\${schema}.schema.yaml"
+        Delete /REBOOTOK "$INSTDIR\profile\build\${schema}.table.bin"
+        Delete /REBOOTOK "$INSTDIR\profile\build\${schema}.prism.bin"
+        Delete /REBOOTOK "$INSTDIR\profile\build\${schema}.reverse.bin"
+      !macroend
+      !insertmacro OldCache "wubi86"
+      !insertmacro OldCache "pinyin_simp"
+      !insertmacro OldCache "stroke"
+      !insertmacro OldCache "double_pinyin"
+      !insertmacro OldCache "double_pinyin_flypy"
+      !insertmacro OldCache "double_pinyin_mspy"
+      RMDir "$INSTDIR\profile\build"
+      RMDir "$INSTDIR\profile"
+      IfFileExists "$INSTDIR\YANVY-Setup.exe" 0 old_cleanup_done
+      IfRebootFlag old_cleanup_done 0
+      StrCpy $CleanupWarning 1
+      old_cleanup_done:
+      RMDir "$INSTDIR"
+      StrCpy $INSTDIR $R9
+      Goto old_cleanup_complete
+      old_cleanup_unsafe:
+      StrCpy $CleanupWarning 1
+      old_cleanup_complete:
+    ${Else}
+      StrCpy $CleanupWarning 1
+    ${EndIf}
+  ${EndIf}
   DetailPrint "安装完成。请从开始菜单启动言舟引擎，再在正常应用里选择言舟输入法。"
   DetailPrint "未更改系统默认输入法。测试前请重新打开目标应用。"
   DetailPrint "升级后请使用本版本的卸载入口，不要运行旧版本文件夹里的卸载程序。"
-  SetErrorLevel 0
+  ${If} $CleanupWarning == 1
+    SetErrorLevel 33
+  ${Else}
+    IfRebootFlag 0 +3
+      SetErrorLevel 3010
+      Goto done
+    SetErrorLevel 0
+  ${EndIf}
   Goto done
   rollback:
     ; Do not unregister the working old version if extraction or validation

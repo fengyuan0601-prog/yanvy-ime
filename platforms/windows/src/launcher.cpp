@@ -29,6 +29,11 @@ int Worker(HINSTANCE instance,bool uninstall,const std::filesystem::path& target
   if(error||!SetEnvironmentVariableW(L"TEMP",temporary.c_str())||!SetEnvironmentVariableW(L"TMP",temporary.c_str())||
       !SetEnvironmentVariableW(L"YANVY_SETUP_TEMP_READY",L"1"))return 40;
   auto schema_text=std::to_wstring(schema);if(!SetEnvironmentVariableW(L"YANVY_SETUP_SCHEMA",schema_text.c_str()))return 40;
+  wchar_t previous[32768]{};DWORD previous_bytes=sizeof(previous);
+  bool safe_previous=RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YANVY-dev",
+      L"InstallLocation",RRF_RT_REG_SZ|RRF_SUBKEY_WOW6464KEY,nullptr,previous,&previous_bytes)==ERROR_SUCCESS&&
+      yanvy::ValidInstallPath(std::filesystem::path(previous));
+  if(!SetEnvironmentVariableW(L"YANVY_PREVIOUS_CAN_CLEAN",safe_previous?L"1":L"0"))return 40;
   std::filesystem::path payload,transaction;
   if(uninstall){payload=target/L"Uninstall-core.exe";if(!std::filesystem::is_regular_file(payload,error))return 40;}
   else{

@@ -49,9 +49,10 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (!manager) return E_INVALIDARG;
     if (manager_) return E_UNEXPECTED;
     manager_ = manager; client_ = id;
-    schema_=preferred_schema_=yanvy::ReadSchemaPreference(yanvy::ModuleDir(module));
-    preference_revision_=yanvy::ReadInputRevision(yanvy::ModuleDir(module));
-    last_pinyin_schema_=schema_?schema_:yanvy::ReadPinyinSchemaPreference(yanvy::ModuleDir(module));
+    auto preferences=yanvy::PreferenceRoot(yanvy::ModuleDir(module));
+    schema_=preferred_schema_=yanvy::ReadSchemaPreference(preferences);
+    preference_revision_=yanvy::ReadInputRevision(preferences);
+    last_pinyin_schema_=schema_?schema_:yanvy::ReadPinyinSchemaPreference(preferences);
     ComPtr<ITfKeystrokeMgr> keys;
     ComPtr<ITfSource> source;
     HRESULT hr = manager_->QueryInterface(IID_PPV_ARGS(&keys));
@@ -243,9 +244,10 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     yanvy::Request q; q.owner = owner_; q.op = op; q.schema = schema_; return q;
   }
   void RefreshPreference(){
-    auto preference=yanvy::ReadSchemaPreference(yanvy::ModuleDir(module));
-    auto revision=yanvy::ReadInputRevision(yanvy::ModuleDir(module));
-    last_pinyin_schema_=yanvy::ReadPinyinSchemaPreference(yanvy::ModuleDir(module));
+    auto preferences=yanvy::PreferenceRoot(yanvy::ModuleDir(module));
+    auto preference=yanvy::ReadSchemaPreference(preferences);
+    auto revision=yanvy::ReadInputRevision(preferences);
+    last_pinyin_schema_=yanvy::ReadPinyinSchemaPreference(preferences);
     if(preference!=preferred_schema_||revision!=preference_revision_){Cancel();schema_=preferred_schema_=preference;preference_revision_=std::move(revision);ascii_=false;if(schema_)last_pinyin_schema_=schema_;}
   }
   bool EnsureFocus() {

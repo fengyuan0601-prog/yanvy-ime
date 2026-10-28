@@ -11,7 +11,7 @@ def main():
     binary=parser.parse_args().binary.resolve()
     cases=[(r'E:\Codex\Programs\YANVY\0.1.0-rc.1',True),
            ('E:\\言舟 测试\\YANVY\\0.1.0-rc.1',True),
-           ('E:\\',False),('C:\\Users\\Example\\YANVY',True),
+           ('E:\\',False),('C:\\Program Files (x86)\\YANVY\\0.1.0-rc.6',True),('C:\\Users\\Example\\YANVY',True),
            ('D:\\YANVY',True),('..\\YANVY',False),
            ('\\\\server\\share\\YANVY',False),('\\\\?\\E:\\YANVY',False),
            ('E:\\safe\\..\\other',False),('E:\\safe\\.\\other',False),

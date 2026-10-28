@@ -2,6 +2,8 @@
 #include "common.hpp"
 #include "ime_core.hpp"
 #include "tray_icon.hpp"
+#include "runtime_profile.hpp"
+#include "version.hpp"
 #include <algorithm>
 #include <memory>
 #include <shellapi.h>
@@ -28,7 +30,7 @@ yanvy::Response Pack(const ime::Snapshot& state) {
   for (size_t i = 0; i < r.count; ++i) Copy(r.candidates[i], state.candidates[i]);
   return r;
 }
-int Serve() {
+int Serve(const std::filesystem::path& test_profile = {}) {
   const auto sid = yanvy::UserSid();
   if (sid.empty()) return 2;
   PSECURITY_DESCRIPTOR sd = nullptr;
@@ -48,7 +50,18 @@ int Serve() {
   int result = 0;
   try {
     const auto root = yanvy::ModuleDir();
-    ime::Engine engine((root / L"data").u8string(), (root / L"profile").u8string());
+    auto user=yanvy::UserDataRoot();
+    auto profile=test_profile.empty()?user/yanvy::kVersion/L"profile":test_profile;
+    if(test_profile.empty()&&user.empty())throw std::runtime_error("User data directory unavailable.");
+    auto lock_name=std::wstring(L"Global\\YANVY.Profile.")+sid;
+    HANDLE profile_lock=CreateMutexW(nullptr,FALSE,lock_name.c_str());
+    if(!profile_lock)throw std::runtime_error("Cannot lock user profile.");
+    DWORD wait=WaitForSingleObject(profile_lock,30000);
+    if(wait!=WAIT_OBJECT_0&&wait!=WAIT_ABANDONED){CloseHandle(profile_lock);throw std::runtime_error("Cannot lock user profile.");}
+    struct LockGuard{HANDLE handle;~LockGuard(){if(handle){ReleaseMutex(handle);CloseHandle(handle);}}} guard{profile_lock};
+    yanvy::PrepareUserProfile(root,profile);
+    ime::Engine engine((root / L"data").u8string(), profile.u8string());
+    ReleaseMutex(profile_lock);CloseHandle(profile_lock);guard.handle=nullptr;
     yanvy::TrayIcon tray;
     GUID owner{};
     std::string schema = "wubi86";
@@ -118,6 +131,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   int argc = 0;
   auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   const std::wstring option = argc > 1 ? argv[1] : L"--serve";
+  std::filesystem::path test_profile;
+#ifdef YANVY_BROKER_FIXTURE
+  if(option==L"--serve-test"&&argc==3)test_profile=argv[2];
+#endif
   LocalFree(argv);
   if (option == L"--stop") {
     HANDLE stop = OpenEventW(EVENT_MODIFY_STATE, FALSE, yanvy::ObjectName(L"Local\\Stop-").c_str());
@@ -144,5 +161,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     } catch (...) { return 5; }
   }
   if (option == L"--tray-smoke") { yanvy::TrayIcon tray; return tray.Registered()&&tray.RemoveForTest()?0:7; }
+#ifdef YANVY_BROKER_FIXTURE
+  if(option==L"--serve-test"&&!test_profile.empty())return Serve(test_profile);
+#endif
   return option == L"--serve" ? Serve() : 1;
 }

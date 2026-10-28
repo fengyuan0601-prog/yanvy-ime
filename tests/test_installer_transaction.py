@@ -27,7 +27,7 @@ def main():
     assert base.is_relative_to(a.temp_dir.resolve()) and not base.exists()
     base.mkdir(parents=True)
     for scenario in ('check-failure','registration-failure','rollback-failure',
-                     'rollback-unregister-failure','success','unicode-success','uninstall-failure'):
+                     'rollback-unregister-failure','success','unicode-success','unsafe-previous','uninstall-failure'):
         root=base/('选择位置 测试' if scenario=='unicode-success' else 'standard')/scenario
         stage=root/'stage';old=root/'old';new=root/'new';stage.mkdir(parents=True);old.mkdir()
         key_path='Software\\YANVY-Installer-Fixture\\'+uuid.uuid4().hex
@@ -38,6 +38,8 @@ def main():
             (folder/'YANVY-INSTALL-MARKER.txt').write_text('YANVY fixture\n')
         (stage/'TESTING.txt').write_text('Synthetic NSIS transaction fixture only.\n')
         (old/'settings.ini').write_text('[display]\nfont_size=23\ntheme=2\nunknown=preserve-only-in-old\n',encoding='ascii')
+        (old/'keep.txt').write_text('unrelated old file must survive')
+        if scenario=='unsafe-previous':(old/'YANVY-INSTALL-MARKER.txt').unlink()
         if scenario=='check-failure':(stage/'check-result.txt').write_text('1')
         if scenario in ('registration-failure','rollback-failure','rollback-unregister-failure'):
             (stage/'register-result.txt').write_text('1')
@@ -58,19 +60,21 @@ def main():
         if scenario!='rollback-unregister-failure':
             with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_WRITE|winreg.KEY_WOW64_64KEY) as key:
                 winreg.SetValueEx(key,'InstallLocation',0,winreg.REG_SZ,str(old));winreg.SetValueEx(key,'DisplayVersion',0,winreg.REG_SZ,'fixture-old')
-        env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
+        env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',YANVY_PREVIOUS_CAN_CLEAN='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
         # Match the native launcher: NSIS requires /D= last and unquoted,
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(new)
         result=subprocess.run(install_command,env=env,timeout=30)
-        expected=26 if scenario=='check-failure' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 0
+        expected=26 if scenario=='check-failure' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
         if scenario=='check-failure':
             assert not old_trace and read_key('InstallLocation')==str(old)
+            assert (old/'YANVY-Setup.exe').exists() and (old/'Uninstall.exe').exists()
             assert not (new/'YANVY-Setup.exe').exists()
         elif scenario=='registration-failure':
             assert old_trace=='register\n' and read_key('InstallLocation')==str(old)
+            assert (old/'YANVY-Setup.exe').exists() and (old/'Uninstall.exe').exists()
             assert read_key('DisplayVersion')=='fixture-old'
             assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'
         elif scenario.startswith('rollback-'):
@@ -78,8 +82,12 @@ def main():
             assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'
             if scenario=='rollback-failure':
                 assert old_trace=='register\n' and read_key('InstallLocation')==str(old)
+        elif scenario=='unsafe-previous':
+            assert read_key('InstallLocation')==str(new) and (old/'YANVY-Setup.exe').exists()
         else:
             assert not old_trace and read_key('InstallLocation')==str(new)
+            assert not (old/'YANVY-Setup.exe').exists() and not (old/'Uninstall.exe').exists()
+            assert (old/'keep.txt').read_text()=='unrelated old file must survive'
             text=(new/'settings.ini').read_bytes()
             decoded=text.decode('utf-16') if text.startswith(b'\xff\xfe') else text.decode('utf-8-sig')
             assert 'font_size=23' in decoded and 'theme=2' in decoded and 'unknown=' not in decoded

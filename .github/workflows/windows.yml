@@ -28,7 +28,7 @@ jobs:
       - name: Render native candidate UI at three scales
         shell: pwsh
         run: |
-          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture
+          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-UI-Render.exe --check-layout
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -57,13 +57,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/stage_data.py --shared-dir build/windows/Release/data --user-dir build/windows/Release/profile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $server = Start-Process build/windows/Release/YANVY-Server.exe -ArgumentList --serve -WindowStyle Hidden -PassThru
+          $userProfile = (Join-Path (Resolve-Path build/windows).Path 'broker-user-profile')
+          $server = Start-Process build/windows/Release/YANVY-Broker-Fixture.exe -ArgumentList '--serve-test',('"' + $userProfile + '"') -WindowStyle Hidden -PassThru
           try {
             Start-Sleep -Seconds 5
-            python tests/test_windows_broker.py --root build/windows/Release --report build/windows/broker-results.json
+            python tests/test_windows_broker.py --root build/windows/Release --profile-dir $userProfile --report build/windows/broker-results.json
             $result = $LASTEXITCODE
           } finally {
             & build/windows/Release/YANVY-Server.exe --stop
             $server.WaitForExit(5000) | Out-Null
           }
-          exit $result
+          if ($result -ne 0) { exit $result }
+          python tests/test_runtime_profile.py --root build/windows/Release --profile build/windows/tampered-user-profile
+          exit $LASTEXITCODE

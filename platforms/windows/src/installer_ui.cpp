@@ -28,19 +28,6 @@ bool ValidInstallPath(const std::filesystem::path& path){
   return true;
 }
 namespace {
-// The engine and settings live below the installation directory and must be
-// writable by the invoking user after the elevated installer has exited.
-bool WritableParent(std::filesystem::path path){
-  path=path.parent_path();
-  while(!path.empty()&&GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES){auto parent=path.parent_path();if(parent==path)return false;path=parent;}
-  if(path.empty())return false;
-  GUID id{};wchar_t name[64]{};if(FAILED(CoCreateGuid(&id))||!StringFromGUID2(id,name,64))return false;
-  auto probe=path/(std::wstring(L"YANVY-write-test-")+name+L".tmp");
-  HANDLE file=CreateFileW(probe.c_str(),GENERIC_WRITE|DELETE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
-      nullptr,CREATE_NEW,FILE_ATTRIBUTE_TEMPORARY|FILE_FLAG_DELETE_ON_CLOSE,nullptr);
-  if(file==INVALID_HANDLE_VALUE)return false;
-  CloseHandle(file);return true;
-}
 std::filesystem::path DefaultInstall(){
   auto preferred=std::filesystem::path(L"E:\\Codex\\Programs");
   if(GetDriveTypeW(L"E:\\")==DRIVE_FIXED&&std::filesystem::is_directory(preferred))return SelectDefaultInstall(true,{});
@@ -88,11 +75,11 @@ struct View {
     Label(dc,kVersion,R(490,25,688,48),caption_font,p.muted,DT_RIGHT);
     if(!live)Text(dc,Title(),R(232,65,690,106),headline,p.text);
     const wchar_t* subtitle=page==1?L"正在处理本地组件，请保持此窗口打开。":page==2?(uninstall?L"其他输入法和保留的设置不受影响。":L"言舟已就绪，重开应用后即可选择。"):
-        page==3?L"请查看下方原因，调整后可以重新尝试。":uninstall?L"移除程序与输入法注册，保留外观设置和未知文件。":L"五笔与拼音，在本机完成每一次输入。";
+        page==3?L"请查看下方原因，调整后可以重新尝试。":uninstall?L"移除程序与输入法注册，保留外观设置和未知文件。":L"设置和缓存优先保存在可写的 E 盘，否则使用当前用户目录。";
     Text(dc,subtitle,R(232,116,688,162),body,p.muted,true);
     if(page==0||page==3){
       Rounded(dc,R(232,179,688,266),D(11),p.background,p.border);
-      Text(dc,uninstall?L"当前安装位置":L"安装位置",R(248,190,620,211),caption_font,p.muted);
+      Text(dc,uninstall?L"当前安装位置":L"安装位置 · 可直接输入完整路径",R(248,190,620,211),caption_font,p.muted);
       if(!live)Text(dc,target.c_str(),R(248,220,uninstall?670:611,248),body,p.text);
       if(!live&&!uninstall)Button(dc,R(619,217,676,251),L"更改",false);
       Text(dc,uninstall?L"请先切换到其他输入法，并关闭使用言舟的应用。":L"默认输入方案",R(232,286,uninstall?688:460,313),body,p.text);
@@ -137,16 +124,16 @@ struct View {
   void Browse(){
     Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
     if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return;
-    dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择安装父目录，将自动创建言舟版本文件夹");
+    dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择安装目录（非空目录将创建言舟版本子目录）");
     auto parent=target.parent_path().parent_path();Microsoft::WRL::ComPtr<IShellItem> start;if(SUCCEEDED(SHCreateItemFromParsingName(parent.c_str(),nullptr,IID_PPV_ARGS(&start))))dialog->SetFolder(start.Get());
     if(SUCCEEDED(dialog->Show(window))){Microsoft::WRL::ComPtr<IShellItem> item;PWSTR value=nullptr;
-      if(SUCCEEDED(dialog->GetResult(&item))&&SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&value))){auto selected=ResolveInstallPath(std::filesystem::path(value));CoTaskMemFree(value);
-        if(ValidInstallPath(selected)){target=selected;status=L"将创建言舟版本目录；请选择当前用户可写的本地文件夹。";}else status=L"请选择本地普通文件夹，不使用网络路径或链接。";Refresh();}}
+      if(SUCCEEDED(dialog->GetResult(&item))&&SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&value))){auto selected=std::filesystem::path(value);CoTaskMemFree(value);
+        std::error_code error;if(!std::filesystem::is_empty(selected,error)||error)selected=ResolveInstallPath(selected);
+        if(ValidInstallPath(selected)){target=selected;status=L"可直接修改上方完整路径；设置和缓存单独保存。";}else status=L"请选择本地普通文件夹，不使用网络路径或链接。";Refresh();}}
   }
   void Start(){
     if(preview){status=L"界面预览不执行安装，也不更改系统输入法。";Refresh();return;}
     if(!ValidInstallPath(target)){status=L"安装位置无效：请选择本地普通文件夹。";page=3;Refresh();return;}
-    if(!uninstall&&!WritableParent(target)){status=L"当前用户无法写入此位置。请选择个人文件夹或其他可写目录。";page=3;Refresh();return;}
     if(!uninstall){std::error_code error;if(std::filesystem::exists(target,error)&&(!std::filesystem::is_directory(target,error)||!std::filesystem::is_empty(target,error))){status=L"此目录已有文件。请更改位置，选择新的空目录。";page=3;Refresh();return;}}
     wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,32768);
     std::wstring arguments=std::wstring(uninstall?L"--worker-uninstall ":L"--worker-install ")+L"\""+target.wstring()+L"\"";
@@ -155,6 +142,15 @@ struct View {
     launch.hwnd=window;launch.lpVerb=L"runas";launch.lpFile=exe;launch.lpParameters=arguments.c_str();launch.nShow=SW_HIDE;
     if(!ShellExecuteExW(&launch)||!launch.hProcess){result=GetLastError();status=result==ERROR_CANCELLED?L"已取消管理员授权，尚未开始安装或卸载。":L"无法启动安装任务，请重新打开安装包后重试。";Refresh();return;}
     worker=launch.hProcess;page=1;status=L"正在处理，请稍候…";Refresh();SetTimer(window,1,200,nullptr);
+  }
+  bool ApplySelectedSchema(){
+    auto executable=target/L"YANVY-Settings.exe";
+    std::wstring command=L"\""+executable.wstring()+L"\" --apply-schema "+std::to_wstring(schema);
+    STARTUPINFOW startup{sizeof(startup)};PROCESS_INFORMATION process{};
+    if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,target.c_str(),&startup,&process))return false;
+    CloseHandle(process.hThread);DWORD code=1;DWORD waited=WaitForSingleObject(process.hProcess,5000);
+    if(waited==WAIT_OBJECT_0)GetExitCodeProcess(process.hProcess,&code);
+    CloseHandle(process.hProcess);return waited==WAIT_OBJECT_0&&code==0;
   }
 };
 LRESULT CALLBACK NotesProc(HWND window,UINT message,WPARAM wp,LPARAM lp){
@@ -174,7 +170,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(!v)return DefWindowProcW(window,message,wp,lp);
   if(message==WM_CREATE){v->dpi=GetDpiForWindow(window);v->Fonts();
     auto control=[&](const wchar_t* cls,const wchar_t* text,DWORD style,int id){return CreateWindowExW(0,cls,text,WS_CHILD|WS_VISIBLE|style,0,0,1,1,window,reinterpret_cast<HMENU>(INT_PTR(id)),v->instance,nullptr);};
-    v->heading=control(L"STATIC",L"",SS_LEFT|SS_CENTERIMAGE,110);v->path_control=control(L"STATIC",L"",SS_LEFT|SS_CENTERIMAGE|SS_PATHELLIPSIS,111);
+    v->heading=control(L"STATIC",L"",SS_LEFT|SS_CENTERIMAGE,110);v->path_control=control(L"EDIT",L"",ES_AUTOHSCROLL|WS_TABSTOP|(v->uninstall?ES_READONLY:0),111);
     v->status_control=control(L"STATIC",L"",SS_LEFT,112);v->primary=control(L"BUTTON",L"",BS_OWNERDRAW|WS_TABSTOP,primary_id);
     v->schema_box=control(L"COMBOBOX",L"默认输入方案",CBS_DROPDOWNLIST|WS_TABSTOP,114);for(auto text:ime::kSchemaLabels)SendMessageW(v->schema_box,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(text));
     v->secondary=control(L"BUTTON",L"取消",BS_OWNERDRAW|WS_TABSTOP,secondary_id);v->browse=control(L"BUTTON",L"更改",BS_OWNERDRAW|WS_TABSTOP,browse_id);
@@ -183,23 +179,26 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   }
   if(message==WM_ERASEBKGND)return 1;
   if(message==WM_PAINT){PAINTSTRUCT ps{};HDC dc=BeginPaint(window,&ps);RECT rect{};GetClientRect(window,&rect);auto buffer=CreateCompatibleDC(dc);auto bitmap=CreateCompatibleBitmap(dc,rect.right,rect.bottom);auto old=SelectObject(buffer,bitmap);v->Draw(buffer,true);BitBlt(dc,0,0,rect.right,rect.bottom,buffer,0,0,SRCCOPY);SelectObject(buffer,old);DeleteObject(bitmap);DeleteDC(buffer);EndPaint(window,&ps);return 0;}
-  if(message==WM_CTLCOLORSTATIC){auto dc=reinterpret_cast<HDC>(wp);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,reinterpret_cast<HWND>(lp)==v->status_control?(v->page==3?RGB(165,58,44):RGB(94,116,133)):RGB(22,44,62));return reinterpret_cast<LRESULT>(reinterpret_cast<HWND>(lp)==v->path_control?v->card:v->white);}
+  if(message==WM_CTLCOLORSTATIC||message==WM_CTLCOLOREDIT){auto dc=reinterpret_cast<HDC>(wp);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,reinterpret_cast<HWND>(lp)==v->status_control?(v->page==3?RGB(165,58,44):RGB(94,116,133)):RGB(22,44,62));return reinterpret_cast<LRESULT>(reinterpret_cast<HWND>(lp)==v->path_control?v->card:v->white);}
   if(message==WM_DRAWITEM){auto& item=*reinterpret_cast<DRAWITEMSTRUCT*>(lp);wchar_t text[80]{};GetWindowTextW(item.hwndItem,text,80);
     if(item.CtlID==notes_id){Fill(item.hDC,item.rcItem,RGB(248,250,252));Label(item.hDC,text,item.rcItem,v->caption_font,RGB(12,109,108));if(item.itemState&ODS_FOCUS){RECT r=item.rcItem;InflateRect(&r,-v->D(3),-v->D(3));DrawFocusRect(item.hDC,&r);}}
     else {Fill(item.hDC,item.rcItem,item.CtlID==browse_id?RGB(253,254,255):RGB(248,250,252));v->Button(item.hDC,item.rcItem,text,item.CtlID==primary_id,(item.itemState&ODS_DISABLED)!=0,(item.itemState&ODS_FOCUS)!=0,(item.itemState&ODS_SELECTED)!=0);}
     return TRUE;}
   if(message==WM_DPICHANGED){v->dpi=HIWORD(wp);auto r=reinterpret_cast<RECT*>(lp);SetWindowPos(window,nullptr,r->left,r->top,r->right-r->left,r->bottom-r->top,SWP_NOZORDER|SWP_NOACTIVATE);v->Fonts();v->Layout();return 0;}
   if(message==WM_TIMER&&v->worker&&WaitForSingleObject(v->worker,0)==WAIT_OBJECT_0){KillTimer(window,1);GetExitCodeProcess(v->worker,&v->result);CloseHandle(v->worker);v->worker=nullptr;
-    v->page=(v->result==0||v->result==3010)?2:3;
-    v->status=v->page==2?(v->result==3010?L"部分文件将在重启后清理；不会自动重启。":L"任务已完成。"):
+    v->page=(v->result==0||v->result==3010||v->result==33)?2:3;
+    bool scheme_ok=v->page!=2||v->uninstall||v->ApplySelectedSchema();
+    v->status=v->page==2?(v->result==3010?L"旧版被占用的文件将在重启后清理；不会自动重启。":v->result==33?L"新版已安装，但旧版目录无法安全验证或清理，请保留旧目录并反馈。":L"任务已完成。"):
       v->result==10?L"目录已有文件，或不是有效的本地安装位置。":v->result==20?L"安装文件处理失败（20），请检查磁盘空间和权限。":
       v->result==21?L"安装文件解压失败（21），请检查磁盘空间和权限。":v->result==22?L"无法启动词库检查程序（22），请检查安全软件和系统权限。":
       v->result==23?L"引擎组件或系统依赖无法加载（23），请检查安全软件并反馈此代码。":v->result==24?L"词库初始化或校验失败（24），请反馈此代码。":v->result==25?L"词库没有返回预期候选（25），请反馈此代码。":
       v->result==26?L"词库检查程序异常退出（26），请检查系统组件和安全软件。":v->result==27?L"无法访问词库目录（27），请检查位置和权限。":
       v->result==28?L"安装路径包含链接或重解析点（28），请选择普通本地目录。":v->result==29?L"词库文件不完整或校验不匹配（29），请重新获取安装包。":
       v->result==32?L"词库部署或配置校验失败（32），请反馈此代码。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
-      v->result==31?L"安装失败，回退未完成。新旧程序文件已保留，请保留目录并报告错误类别 31。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);v->Refresh();return 0;}
-  if(message==WM_COMMAND){if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){
+      v->result==31?L"安装失败，回退未完成。新旧程序文件已保留，请保留目录并报告错误类别 31。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);
+    if(!scheme_ok)v->status+=L" 输入方案未保存，请打开设置重试。";
+    v->Refresh();return 0;}
+  if(message==WM_COMMAND){if(LOWORD(wp)==111&&HIWORD(wp)==EN_CHANGE){if(v->path_control){wchar_t path[32768]{};GetWindowTextW(v->path_control,path,32768);v->target=std::filesystem::path(path);}return 0;}if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){
     case primary_id:if(v->page==2)DestroyWindow(window);else if(v->page!=1)v->Start();return 0;
     case secondary_id:if(v->page!=1)DestroyWindow(window);return 0;
     case browse_id:v->Browse();return 0;
@@ -218,7 +217,7 @@ int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show){
   View view;view.instance=instance;view.uninstall=uninstall;view.preview=preview;if(uninstall)view.target=ModuleDir();
   else{wchar_t previous[32768]{};DWORD bytes=sizeof(previous);
     if(RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YANVY-dev",L"InstallLocation",RRF_RT_REG_SZ|RRF_SUBKEY_WOW6464KEY,nullptr,previous,&bytes)==ERROR_SUCCESS)
-      view.schema=ReadSchemaPreference(std::filesystem::path(previous));}
+      view.schema=ReadSchemaPreference(PreferenceRoot(std::filesystem::path(previous)));}
   WNDCLASSW wc{};wc.hInstance=instance;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Setup.rc1";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));RegisterClassW(&wc);
   UINT dpi=GetDpiForSystem();RECT rect{0,0,MulDiv(720,int(dpi),96),MulDiv(480,int(dpi),96)};DWORD style=WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX;AdjustWindowRectExForDpi(&rect,style,FALSE,0,dpi);
   HWND window=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,uninstall?L"言舟 · 卸载":L"言舟 · 安装",style,CW_USEDEFAULT,CW_USEDEFAULT,rect.right-rect.left,rect.bottom-rect.top,nullptr,nullptr,instance,&view);

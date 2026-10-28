@@ -27,6 +27,15 @@ bool SavePreferences(const std::filesystem::path& ini,const Preferences& value,b
   if(!ok)DeleteFileW(temporary.c_str());
   WritePrivateProfileStringW(nullptr,nullptr,nullptr,ini.c_str());return ok;
 }
+bool EnsureUserSettings(const std::filesystem::path& install,const std::filesystem::path& user){
+  if(user.empty())return false;
+  std::error_code error;std::filesystem::create_directories(user,error);if(error)return false;
+  auto ini=user/L"settings.ini",initial=install/L"settings.ini";
+  bool exists=std::filesystem::exists(ini,error);if(error)return false;
+  bool has_initial=std::filesystem::exists(initial,error);if(error)return false;
+  if(!exists&&has_initial){std::filesystem::copy_file(initial,ini,std::filesystem::copy_options::skip_existing,error);if(error)return false;}
+  return true;
+}
 struct View {
   HINSTANCE instance{};HWND window{},status_window{};UINT dpi=96;int page=0;
   HFONT body{},title{},caption{},strong{};HICON icon{};HBRUSH background=CreateSolidBrush(RGB(245,248,251)),card=CreateSolidBrush(RGB(253,254,255));
@@ -90,7 +99,7 @@ struct View {
 };
 LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   auto v=reinterpret_cast<View*>(GetWindowLongPtrW(window,GWLP_USERDATA));if(message==WM_NCCREATE){v=static_cast<View*>(reinterpret_cast<CREATESTRUCTW*>(lp)->lpCreateParams);v->window=window;SetWindowLongPtrW(window,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(v));}if(!v)return DefWindowProcW(window,message,wp,lp);
-  if(message==WM_CREATE){v->dpi=GetDpiForWindow(window);v->Fonts();auto root=ModuleDir();v->saved.display=ReadAppearance(root);v->saved.schema=ReadSchemaPreference(root);v->saved.pinyin=v->saved.schema?v->saved.schema:ReadPinyinSchemaPreference(root);v->saved.double_schema=v->saved.pinyin>=2?v->saved.pinyin:ReadDoubleSchemaPreference(root);v->current=v->saved;
+  if(message==WM_CREATE){v->dpi=GetDpiForWindow(window);v->Fonts();auto root=PreferenceRoot(ModuleDir());v->saved.display=ReadAppearance(root);v->saved.schema=ReadSchemaPreference(root);v->saved.pinyin=v->saved.schema?v->saved.schema:ReadPinyinSchemaPreference(root);v->saved.double_schema=v->saved.pinyin>=2?v->saved.pinyin:ReadDoubleSchemaPreference(root);v->current=v->saved;
     RECT empty{0,0,1,1};for(auto item:{std::pair<int,const wchar_t*>{NavInput,L"输入方案"},{NavAppearance,L"外观"},{NavAbout,L"关于"}})v->Control(L"BUTTON",item.second,BS_OWNERDRAW|WS_TABSTOP,item.first,empty);
     v->pinyin_radio=v->Control(L"BUTTON",L"拼音",BS_AUTORADIOBUTTON|WS_GROUP|WS_TABSTOP,PinyinRadio,empty);v->wubi_radio=v->Control(L"BUTTON",L"五笔86",BS_AUTORADIOBUTTON,WubiRadio,empty);
     v->full_radio=v->Control(L"BUTTON",L"全拼",BS_AUTORADIOBUTTON|WS_GROUP|WS_TABSTOP,FullRadio,empty);v->double_radio=v->Control(L"BUTTON",L"双拼",BS_AUTORADIOBUTTON,DoubleRadio,empty);
@@ -115,11 +124,19 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
     if((id==FontBox||id==ThemeBox)&&event==CBN_SELCHANGE){v->current.display.font_size=12+int(SendMessageW(v->font_box,CB_GETCURSEL,0,0));v->current.display.theme=int(SendMessageW(v->theme_box,CB_GETCURSEL,0,0));v->Changed();return 0;}
     if(id==ResetButton){if(v->page==0){v->current.schema=v->current.pinyin=1;v->current.double_schema=2;}else if(v->page==1)v->current.display={};v->Changed();return 0;}
     if(id==SaveButton){bool apply=v->page==0||v->current.schema!=v->saved.schema||v->current.pinyin!=v->saved.pinyin||v->current.double_schema!=v->saved.double_schema;
-      if(SavePreferences(ModuleDir()/L"settings.ini",v->current,apply)){v->saved=v->current;v->status=L"已保存；下次输入生效，未确认编码会取消。";}else v->status=L"保存失败，请检查此安装目录的写入权限。";v->Sync();return 0;}
+      auto user=UserDataRoot();
+      if(EnsureUserSettings(ModuleDir(),user)&&SavePreferences(user/L"settings.ini",v->current,apply)){v->saved=v->current;v->status=L"已保存；下次输入生效，未确认编码会取消。";}else v->status=L"保存失败，请检查当前用户本地应用目录的写入权限。";v->Sync();return 0;}
     if(id==HelpButton){auto file=ModuleDir()/L"TESTING.txt";ShellExecuteW(window,L"open",file.c_str(),nullptr,nullptr,SW_SHOWNORMAL);return 0;}
   }
   if(message==WM_DESTROY){PostQuitMessage(0);return 0;}return DefWindowProcW(window,message,wp,lp);
 }
+}
+int ApplyInputScheme(const std::filesystem::path& install,const std::filesystem::path& user,uint32_t schema){
+  if(schema>=ime::kSchemaCount||!EnsureUserSettings(install,user))return 1;
+  Preferences value;value.display=ReadAppearance(user);value.schema=schema;
+  value.pinyin=ReadPinyinSchemaPreference(user);value.double_schema=ReadDoubleSchemaPreference(user);
+  if(schema){value.pinyin=schema;if(schema>=2)value.double_schema=schema;}
+  return SavePreferences(user/L"settings.ini",value,true)?0:1;
 }
 int PreferencesUI(HINSTANCE instance,int show){
   auto initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);if(FAILED(initialized))return 1;SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);INITCOMMONCONTROLSEX common{sizeof(common),ICC_STANDARD_CLASSES};InitCommonControlsEx(&common);
@@ -147,6 +164,10 @@ int PreferencesFixture(const std::filesystem::path& directory){
   WritePrivateProfileStringW(L"input",L"schema",L"99",ini.c_str());WritePrivateProfileStringW(L"input",L"pinyin_schema",L"999",ini.c_str());
   if(ReadSchemaPreference(directory)!=1||ReadPinyinSchemaPreference(directory)!=1)return 9;
   value.schema=0;value.pinyin=2;if(!SavePreferences(ini,value)||ReadSchemaPreference(directory)!=0||ReadPinyinSchemaPreference(directory)!=2)return 10;
+  auto separate=directory/L"separate-user";
+  if(ApplyInputScheme(directory,separate,3)!=0||ReadSchemaPreference(separate)!=3||ReadPinyinSchemaPreference(separate)!=3||ReadSchemaPreference(directory)!=0)return 14;
+  wchar_t preserved[64]{};GetPrivateProfileStringW(L"custom",L"synthetic",L"",preserved,64,(separate/L"settings.ini").c_str());
+  if(std::wstring(preserved)!=L"preserve-me")return 15;
   return 0;
 }
 #endif

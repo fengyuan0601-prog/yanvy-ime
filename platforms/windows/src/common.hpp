@@ -6,6 +6,7 @@
 #include <windows.h>
 #include "input_schemas.hpp"
 #include <sddl.h>
+#include <shlobj.h>
 #include <string>
 #include <filesystem>
 #include <vector>
@@ -33,6 +34,49 @@ inline std::filesystem::path ModuleDir(HMODULE module = nullptr) {
   DWORD n = GetModuleFileNameW(module, path.data(), DWORD(path.size()));
   path.resize(n);
   return std::filesystem::path(path).parent_path();
+}
+// User settings are shared across upgrades; the installed file supplies the
+// initial choice and migrated defaults until the user saves a preference.
+inline std::wstring UserSid();
+inline bool PlainLocalPath(std::filesystem::path path) {
+  if(!path.is_absolute()||path.root_name().wstring().size()!=2)return false;
+  UINT drive=GetDriveTypeW(path.root_path().c_str());
+  if(drive!=DRIVE_FIXED&&drive!=DRIVE_REMOVABLE)return false;
+  for(;!path.empty();path=path.parent_path()){
+    DWORD attributes=GetFileAttributesW(path.c_str());
+    if(attributes!=INVALID_FILE_ATTRIBUTES&&(attributes&FILE_ATTRIBUTE_REPARSE_POINT))return false;
+    if(path==path.parent_path())break;
+  }
+  return true;
+}
+inline bool CanCreateUserData(std::filesystem::path path) {
+  while(!path.empty()&&GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES){
+    auto parent=path.parent_path();if(parent==path)return false;path=parent;
+  }
+  if(path.empty())return false;
+  HANDLE directory=CreateFileW(path.c_str(),FILE_ADD_SUBDIRECTORY,
+      FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,nullptr);
+  if(directory==INVALID_HANDLE_VALUE)return false;
+  CloseHandle(directory);return true;
+}
+inline std::filesystem::path UserDataRoot() {
+  // Honor the established E: storage location on machines that have it;
+  // ordinary installations without that location use Windows LocalAppData.
+  const std::filesystem::path preferred=L"E:\\Codex\\Programs";
+  std::error_code error;
+  if(GetDriveTypeW(L"E:\\")==DRIVE_FIXED&&std::filesystem::is_directory(preferred,error)){
+    auto sid=UserSid();auto data=preferred/L"YANVY-UserData"/sid;
+    if(!sid.empty()&&PlainLocalPath(data)&&CanCreateUserData(data))return data;
+  }
+  PWSTR local=nullptr;
+  if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local))) return {};
+  auto path=std::filesystem::path(local)/L"YANVY";
+  CoTaskMemFree(local);return PlainLocalPath(path)?path:std::filesystem::path{};
+}
+inline std::filesystem::path PreferenceRoot(const std::filesystem::path& install) {
+  auto user=UserDataRoot();
+  std::error_code error;
+  return !user.empty()&&std::filesystem::is_regular_file(user/L"settings.ini",error)?user:install;
 }
 inline uint32_t ReadSchemaPreference(const std::filesystem::path& root) {
   UINT value=GetPrivateProfileIntW(L"input",L"schema",1,(root/L"settings.ini").c_str());
@@ -67,7 +111,7 @@ inline std::wstring UserSid() {
 inline std::wstring ObjectName(const wchar_t* prefix) {
   DWORD session = 0;
   ProcessIdToSessionId(GetCurrentProcessId(), &session);
-  return std::wstring(prefix) + L"YANVY-v3-" + UserSid() + L"-" + std::to_wstring(session);
+  return std::wstring(prefix) + L"YANVY-v4-" + UserSid() + L"-" + std::to_wstring(session);
 }
 inline std::wstring PipeName() { return ObjectName(L"\\\\.\\pipe\\"); }
 // Bound both the connection and each IO operation. A failed engine never

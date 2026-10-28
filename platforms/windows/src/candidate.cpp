@@ -15,7 +15,7 @@ void CandidateWindow::Hide(){
 void CandidateWindow::Update(HINSTANCE module,const std::filesystem::path& root,const Response& state,
     uint32_t schema,bool ascii,RECT caret,bool transient,std::function<void(int)> select,std::function<void()> configure){
   state_=state;SecureZeroMemory(state_.commit,sizeof(state_.commit));
-  schema_=schema;ascii_=ascii;caret_=caret;appearance_=ReadAppearance(root);select_=std::move(select);configure_=std::move(configure);hover_=-1;
+  schema_=schema;ascii_=ascii;caret_=caret;appearance_=ReadAppearance(PreferenceRoot(root));select_=std::move(select);configure_=std::move(configure);hover_=-1;
   if(!transient&&!state.input[0]&&!state.preedit[0]){Hide();return;}
   if(!window_){
     module_=module;

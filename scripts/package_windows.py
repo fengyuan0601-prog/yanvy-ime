@@ -66,6 +66,7 @@ def main():
               "rc3":"caret geometry failure/clipping checks and candidate layout fixture; installed rc2 files verified and rc2 core rechecked; real rc3 installation and application tests pending. See docs/RC3-READINESS.md",
               "rc4":"15 path boundaries, synthetic no-E fallback, 7 isolated NSIS cases including Unicode/space, 35 v3 broker checks, native tray add/remove smoke; real installation and tray menu interaction remain unverified. See docs/RC4-READINESS.md",
               "rc5":"real librime and isolated NSIS checks cover valid data, corrupted data and missing rime DLL; path-deduplication and failure categorization. User-reported target computer installation not yet verified. See docs/RC5-READINESS.md",
+              "rc6":"16 path checks; 35 broker checks with a simulated protected install directory; isolated user preference and tamper checks; 8 NSIS synthetic upgrade/rollback and 4 real-engine NSIS cases. Actual UAC installation and migration remain unverified. See docs/RC6-READINESS.md",
               "current_system_upgrade_and_application_matrix":"NOT RUN; user installation and further real application verification required"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY "+VERSION+"\n"+commit+"\n",encoding="utf-8")
