@@ -72,6 +72,7 @@ int wmain() {
         };
         ComPtr<Context> context; context.Attach(new Context);
         auto service=new Service;
+        ComPtr<yanvy::ModeLanguageBar> retained_button;
         // SetKeyboardState affects this fixture thread's keyboard queue only;
         // it sends no desktop input and changes no system input profile.
         BYTE saved[256]{}, local[256]{};
@@ -80,9 +81,21 @@ int wmain() {
         auto toggle = [&]() { BOOL eaten=FALSE; return SUCCEEDED(service->OnPreservedKey(context.Get(),yanvy::kToggleEnglish,&eaten)) && eaten; };
         if (keyboard_ready && set_open(true)) {
           service->BeginModeFixture(manager.Get(),client);
+          retained_button=service->ModeButtonFixture();
+          auto button_text = [&]() {
+            BSTR text=nullptr;std::wstring value;
+            if(retained_button&&SUCCEEDED(retained_button->GetText(&text))&&text){value.assign(text,SysStringLen(text));SysFreeString(text);}
+            return value;
+          };
+          bool button_ok=retained_button&&button_text()==L"中"&&
+              retained_button->OnClick(TF_LBI_CLK_LEFT,{0,0},nullptr)==S_OK&&!chinese()&&button_text()==L"英"&&
+              retained_button->OnClick(TF_LBI_CLK_LEFT,{0,0},nullptr)==S_OK&&chinese()&&button_text()==L"中"&&
+              set_open(false)&&button_text()==L"英"&&set_open(true)&&button_text()==L"中"&&
+              toggle()&&button_text()==L"英"&&toggle()&&button_text()==L"中";
+          if(!button_ok)std::cerr<<"FAIL native mode button and system/shortcut mode diverged\n";
           // Service shortcut to English, OS change back to Chinese, repeated;
           // also verify the service callback can switch in both directions.
-          bool ok=chinese() && set_open(false) && !chinese() && set_open(true) && chinese() &&
+          bool ok=button_ok&&chinese() && set_open(false) && !chinese() && set_open(true) && chinese() &&
             toggle() && !chinese() && set_open(true) && chinese() &&
             toggle() && !chinese() && set_open(true) && chinese() &&
             toggle() && !chinese() && toggle() && chinese();
@@ -173,6 +186,16 @@ int wmain() {
         }
         if (keyboard_ready) SetKeyboardState(saved);
         service->Release();
+        if(retained_button){
+          HICON icon=nullptr;
+          const bool safe=DllCanUnloadNow()==S_FALSE&&
+              retained_button->OnClick(TF_LBI_CLK_LEFT,{0,0},nullptr)==S_FALSE&&
+              retained_button->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==S_FALSE&&
+              SUCCEEDED(retained_button->GetIcon(&icon));
+          if(icon)DestroyIcon(icon);
+          retained_button.Reset();
+          if(!safe||DllCanUnloadNow()!=S_OK){std::cerr<<"FAIL retained native mode item lifetime\n";result=1;}
+        }
       }
       manager->Deactivate();
     }

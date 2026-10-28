@@ -14,7 +14,7 @@
 
 using Microsoft::WRL::ComPtr;
 namespace {
-const GUID* const categories[] = { &GUID_TFCAT_TIP_KEYBOARD };
+const GUID* const categories[] = { &GUID_TFCAT_TIP_KEYBOARD, &yanvy::kCategorySystraySupport };
 template<class Function> Function LoadProcedure(HMODULE module,const char* name) {
   const auto address=GetProcAddress(module,name);Function result=nullptr;
   static_assert(sizeof(result)==sizeof(address));
@@ -69,16 +69,18 @@ HRESULT DeleteComClass(HKEY hive, REGSAM view, const wchar_t* clsid=yanvy::kClsi
       yanvy::kName,ULONG(wcslen(yanvy::kName)),dll.c_str(),ULONG(dll.wstring().size()),0,nullptr,0,TRUE,0);
   std::cout << "register_profile=0x" << std::hex << static_cast<unsigned long>(hr) << '\n';
   ComPtr<ITfCategoryMgr> category;
+  size_t categories_registered=0;
   if (SUCCEEDED(hr)) hr = CoCreateInstance(CLSID_TF_CategoryMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&category));
   if (SUCCEEDED(hr)) for (auto guid : categories) {
     hr = category->RegisterCategory(yanvy::kService,*guid,yanvy::kService);
     std::cout << "register_category=0x" << std::hex << static_cast<unsigned long>(hr) << '\n';
     if (FAILED(hr)) break;
+    ++categories_registered;
   }
   if (FAILED(hr)) {
     HRESULT cleanup = profiles ? profiles->UnregisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,0) : S_OK;
-    if (SUCCEEDED(cleanup) && category) for (auto guid : categories) {
-      cleanup = category->UnregisterCategory(yanvy::kService,*guid,yanvy::kService);
+    if (SUCCEEDED(cleanup) && category) for (size_t index=0;index<categories_registered;++index) {
+      cleanup = category->UnregisterCategory(yanvy::kService,*categories[index],yanvy::kService);
       if (FAILED(cleanup)) break;
     }
     if (SUCCEEDED(cleanup)) { DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY); }
@@ -174,9 +176,17 @@ struct RegistrationRemoval {
     return RemovalResult(error);
   }
 };
+struct PreviousRegistrationOperations {
+  bool machine;
+  HRESULT Present(const yanvy::PreviousTextService& identity,bool& present){return ProfilePresent(*identity.service,*identity.profile,present);}
+  HRESULT Remove(const yanvy::PreviousTextService& identity){
+    RegistrationRemoval removal{machine,identity.service,identity.profile,identity.clsid};
+    return yanvy::UnregisterTextService(removal);
+  }
+};
 HRESULT RetireLegacy(bool machine) {
-  RegistrationRemoval removal{machine,&yanvy::kLegacyService,&yanvy::kLegacyProfile,yanvy::kLegacyClsid};
-  return yanvy::UnregisterTextService(removal);
+  PreviousRegistrationOperations operations{machine};
+  return yanvy::RetirePreviousTextServices(operations);
 }
 [[maybe_unused]] HRESULT Unregister(bool machine, bool include_legacy=true) {
   if(include_legacy){HRESULT hr=RetireLegacy(machine);if(FAILED(hr))return hr;}
@@ -232,7 +242,8 @@ int wmain(int argc, wchar_t** argv) {
   else if (option == L"--validate-machine-runtime" && argc==3) hr=yanvy::ValidateMachineRuntime(std::filesystem::path(argv[2]));
   else if (option == L"--validate-previous-cleanup" && argc==3) hr=yanvy::ValidatePreviousCleanup(std::filesystem::path(argv[2]));
   else if (option == L"--has-legacy-profile" && argc==2) {
-    bool present=false;hr=ProfilePresent(yanvy::kLegacyService,yanvy::kLegacyProfile,present);
+    PreviousRegistrationOperations operations{true};bool present=false;
+    hr=yanvy::PreviousTextServicePresent(operations,present);
     if(SUCCEEDED(hr)&&!present)hr=HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
   }
   else if (option == L"--stop-previous-brokers" && (argc==2||argc==5)) {

@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #include "common.hpp"
 #include "ime_core.hpp"
-#include "tray_icon.hpp"
 #include "runtime_profile.hpp"
 #include "version.hpp"
 #include <algorithm>
 #include <array>
-#include <memory>
 #include <shellapi.h>
 #include <cwctype>
 
@@ -124,9 +122,8 @@ int Serve(const std::filesystem::path& test_profile = {}) {
     yanvy::PrepareUserProfile(data_root,profile);
     ime::Engine engine((data_root / L"data").u8string(), profile.u8string());
     ReleaseMutex(profile_lock);CloseHandle(profile_lock);guard.handle=nullptr;
-    // Isolated protocol fixtures must not create an extra user-facing icon.
-    std::unique_ptr<yanvy::TrayIcon> tray;
-    if (test_profile.empty()) tray = std::make_unique<yanvy::TrayIcon>();
+    // Windows owns the input indicator and the TSF Chinese/English button.
+    // The engine must not create a second, independent notification icon.
     LegacyBridges bridges{stop};
     if (!bridges.Start(&sa)) { SetEvent(stop);result=5; }
     GUID owner{};
@@ -241,7 +238,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
       return 5;
     } catch (...) { return 5; }
   }
-  if (option == L"--tray-smoke") { yanvy::TrayIcon tray; return tray.Registered()&&tray.Version4()&&tray.RemoveForTest()?0:7; }
 #ifdef YANVY_BROKER_FIXTURE
   if(option==L"--serve-test"&&!test_profile.empty())return Serve(test_profile);
 #endif

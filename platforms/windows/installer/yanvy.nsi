@@ -223,6 +223,9 @@ Section "言舟 Windows 输入法"
   ${EndIf}
   ${If} $PreviousDir != ""
   ${AndIf} $PreviousDir != $INSTDIR
+  ${AndIf} $CleanupWarning == 0
+    ; Failed retirement can leave a previous COM class pointing at its DLL.
+    ; Preserve its whole runtime and repair tools until removal can succeed.
     ; Recheck the complete protected path before deleting old machine files.
     ExecWait '"$INSTDIR\YANVY-Setup.exe" --validate-previous-cleanup "$PreviousDir"' $0
     ${If} ${Errors}

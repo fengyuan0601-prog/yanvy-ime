@@ -8,6 +8,7 @@
 #include "caret_geometry.hpp"
 #include "edit_session.hpp"
 #include "input_mode.hpp"
+#include "language_bar.hpp"
 #include "msctf_compat.hpp"
 #include <wrl/client.h>
 #include <atomic>
@@ -84,6 +85,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (SUCCEEDED(hr)) source->AdviseSink(IID_ITfThreadFocusSink, static_cast<ITfThreadFocusSink*>(this), &focus_cookie_);
     if (FAILED(hr)) { Deactivate(); return hr; }
     AttachInputMode();
+    AttachLanguageBar();
     ComPtr<ITfDocumentMgr> document;
     if (SUCCEEDED(manager_->GetFocus(&document))) Bind(document.Get());
 #ifndef YANVY_MODE_FIXTURE
@@ -96,6 +98,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   HRESULT STDMETHODCALLTYPE Deactivate() override {
     shortcut_held_ = false;
+    DetachLanguageBar();
     if (!manager_) return S_OK;
 #ifdef YANVY_TSF_HOST_FIXTURE
     InterlockedIncrement(&host_diagnostics.deactivations);
@@ -255,9 +258,11 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
 #ifdef YANVY_MODE_FIXTURE
   void BeginModeFixture(ITfThreadMgr* manager, TfClientId client) {
-    manager_ = manager; client_ = client; preserved_release_=true; AttachInputMode();
+    manager_ = manager; client_ = client; preserved_release_=true; AttachInputMode();AttachLanguageBar();
   }
+  yanvy::ModeLanguageBar* ModeButtonFixture() const {return language_bar_.Get();}
   void EndModeFixture() {
+    DetachLanguageBar();
     if (mode_) { mode_->Detach(); mode_.Reset(); }
     manager_.Reset(); preserved_release_=false;
   }
@@ -268,10 +273,33 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   bool HasPendingFocusFixture() const { return last_.input[0]!=0&&last_.preedit[0]!=0; }
 #endif
  private:
+  void AttachLanguageBar() {
+    try {
+      language_bar_.Attach(new yanvy::ModeLanguageBar(yanvy::kService,ascii_,[this]{
+        ComPtr<ITfTextInputProcessorEx> keep_alive=this;
+        ToggleInputMode();
+      },[this]{
+        ComPtr<ITfTextInputProcessorEx> keep_alive=this;
+        yanvy::OpenSettings(yanvy::ModuleDir(module));
+      },&objects));
+#if !defined(YANVY_MODE_FIXTURE) && !defined(YANVY_TSF_HOST_FIXTURE)
+      ComPtr<ITfLangBarItemMgr> items;
+      if(FAILED(manager_->QueryInterface(IID_ITfLangBarItemMgr,reinterpret_cast<void**>(items.GetAddressOf())))||
+          FAILED(language_bar_binding_.Attach(items.Get(),language_bar_.Get())))DetachLanguageBar();
+#endif
+    }catch(...){DetachLanguageBar();}
+    // UI integration is optional for TSF activation. Input keeps working if
+    // a host cannot provide a language bar; no independent tray is recreated.
+  }
+  void DetachLanguageBar() {
+    language_bar_binding_.Detach();
+    if(language_bar_)language_bar_->Disconnect();
+    language_bar_.Reset();
+  }
   void AttachInputMode() {
     mode_.Attach(new(std::nothrow) yanvy::InputModeCompartment);
     if (mode_ && SUCCEEDED(mode_->Attach(manager_.Get(),client_,[this](bool open) {
-      if (ascii_ != !open) { Cancel(); ascii_ = !open; Show(true); }
+      if (ascii_ != !open) { Cancel(); ascii_ = !open;if(language_bar_)language_bar_->SetAscii(ascii_); Show(true); }
     }))) {
       bool open = true; if (mode_->Read(open)) ascii_ = !open;
     } else mode_.Reset();
@@ -279,6 +307,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   void ToggleInputMode() {
     const bool next_ascii = !ascii_;
     Cancel(); ascii_ = next_ascii;
+    if(language_bar_)language_bar_->SetAscii(ascii_);
     if (mode_) mode_->SetOpen(!next_ascii);
     Show(true);
   }
@@ -524,6 +553,8 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   ComPtr<ITfContext> context_;
   ComPtr<ITfComposition> composition_;
   ComPtr<yanvy::InputModeCompartment> mode_;
+  ComPtr<yanvy::ModeLanguageBar> language_bar_;
+  yanvy::LanguageBarBinding language_bar_binding_;
   GUID owner_{};
   uint64_t generation_ = 0;
   uint64_t snapshot_revision_ = 0;

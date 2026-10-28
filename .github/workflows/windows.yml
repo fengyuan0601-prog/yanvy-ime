@@ -26,11 +26,13 @@ jobs:
           $sdk = (Resolve-Path .deps/rime/dist).Path.Replace('\','/')
           cmake -S platforms/windows -B build/windows-x86 -G "Visual Studio 17 2022" -A Win32 "-DRIME_INCLUDE_DIR=$sdk/include" "-DRIME_LIBRARY=$sdk/lib/rime.lib"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build build/windows-x86 --config Release --target YANVY-TSF YANVY-COM-Architecture-Fixture YANVY-Broker-Architecture-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-TSF-Identity-Fixture
+          cmake --build build/windows-x86 --config Release --target YANVY-TSF YANVY-COM-Architecture-Fixture YANVY-Broker-Architecture-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-TSF-Identity-Fixture YANVY-Language-Bar-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows-x86/Release/YANVY-COM-Architecture-Fixture.exe (Resolve-Path build/windows-x86/Release/YANVY-TSF.dll).Path
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows-x86/Release/YANVY-Input-Mode-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows-x86/Release/YANVY-Language-Bar-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows-x86/Release/YANVY-TSF-Mode-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -41,6 +43,13 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: python tests/test_core.py --binary build/windows/core/Release/ime-core.exe --report build/windows/core-results.json
+      - name: Native input-mode button
+        shell: pwsh
+        run: |
+          cmake --build build/windows --config Release --target YANVY-Language-Bar-Fixture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-Language-Bar-Fixture.exe
+          exit $LASTEXITCODE
       - name: Render native candidate UI at three scales
         shell: pwsh
         run: |

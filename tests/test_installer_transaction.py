@@ -31,7 +31,7 @@ def main():
     ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)
     scenarios=('x86-check-failure','check-failure','check-crash','registration-failure','rollback-failure',
                'rollback-unregister-failure','legacy-registration-failure','legacy-rollback-failure',
-               'success','unicode-success','unsafe-previous','uninstall-failure','wrong-runtime-target')
+               'success','unicode-success','unsafe-previous','retire-failure','uninstall-failure','wrong-runtime-target')
     if a.scenario and not set(a.scenario).issubset(scenarios):parser.error('Unknown scenario')
     for scenario in scenarios:
         if a.scenario and scenario not in a.scenario:continue
@@ -64,6 +64,13 @@ def main():
         if scenario=='rollback-unregister-failure':(stage/'unregister-result.txt').write_text('1')
         if scenario.startswith('legacy-'):(stage/'legacy-profile-result.txt').write_text('0')
         if scenario=='legacy-rollback-failure':(stage/'unregister-result.txt').write_text('1')
+        if scenario=='retire-failure':
+            (stage/'retire-result.txt').write_text('1')
+            # A failed TSF removal leaves the previous COM class registered.
+            # Its target and repair files must remain available, byte-for-byte.
+            for folder in (stage,old):
+                (folder/'YANVY-TSF.dll').write_bytes(b'synthetic COM target; never loaded')
+            previous_files={p.name:p.read_bytes() for p in old.iterdir()}
         (root/'stage-version.nsh').write_text('!define YANVY_VERSION "0.1.0-rc.1"\n!define YANVY_WINDOWS_VERSION "0.1.0.3"\n')
         (root/'stage-uninstall.nsh').write_text('\n'.join('Delete /REBOOTOK "$INSTDIR\\'+p.name+'"' for p in stage.iterdir())+'\n')
         source=(ROOT/'platforms/windows/installer/yanvy.nsi').read_text(encoding='utf-8-sig')
@@ -87,7 +94,7 @@ def main():
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(root/'forbidden target' if scenario=='wrong-runtime-target' else new)
         result=subprocess.run(install_command,env=env,timeout=90)
-        expected=23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario in ('registration-failure','legacy-registration-failure') else 31 if scenario.startswith('rollback-') or scenario=='legacy-rollback-failure' else 33 if scenario=='unsafe-previous' else 41 if scenario=='wrong-runtime-target' else 0
+        expected=23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario in ('registration-failure','legacy-registration-failure') else 31 if scenario.startswith('rollback-') or scenario=='legacy-rollback-failure' else 33 if scenario in ('unsafe-previous','retire-failure') else 41 if scenario=='wrong-runtime-target' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
         assert not old_trace,(scenario,'old executable was invoked')
@@ -111,6 +118,10 @@ def main():
         elif scenario=='unsafe-previous':
             assert read_key('InstallLocation')==str(new) and (old/'YANVY-Setup.exe').exists()
             assert (new/'fixture-trace.txt').read_text()=='check\nregister\nretire\n'
+        elif scenario=='retire-failure':
+            assert read_key('InstallLocation')==str(new) and (new/'YANVY-TSF.dll').exists()
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nretire\n'
+            assert {p.name:p.read_bytes() for p in old.iterdir()}==previous_files, 'retirement failure removed files still referenced by the previous registration'
         else:
             assert not old_trace and read_key('InstallLocation')==str(new)
             assert (new/'fixture-trace.txt').read_text()=='check\nregister\nretire\n'

@@ -107,7 +107,7 @@ struct View {
       Rounded(dc,R(232,179,688,333),D(11),p.background,p.border);
       Text(dc,L"✓",R(252,195,300,233),headline,p.accent);
       Text(dc,uninstall?L"已移除言舟的输入法注册":L"接下来，只需三步",R(298,199,665,229),strong,p.text);
-      Text(dc,uninstall?L"被应用占用的文件会保留至可以安全清理。\n其余输入方式和个人设置不受影响。":L"1   在系统输入法列表中选择言舟\n2   Ctrl+空格切换中文与英文\n3   右键言舟图标，打开设置",R(252,244,668,320),body,p.text,true);
+      Text(dc,uninstall?L"被应用占用的文件会保留至可以安全清理。\n其余输入方式和个人设置不受影响。":L"1   在系统输入法列表中选择言舟\n2   Ctrl+空格切换中文与英文\n3   右键“中/英”按钮，打开设置",R(252,244,668,320),body,p.text,true);
     }
     if(!live&&!status.empty())Text(dc,status.c_str(),R(232,353,688,394),caption_font,page==3?RGB(165,58,44):p.muted,true);
     Fill(dc,R(232,403,688,404),p.line);
@@ -225,7 +225,7 @@ struct View {
       if(UserStep(L"YANVY-Setup.exe",L"--verify-current-broker",Stage::verify_broker))return;
       configuration_failed=true;result=GetLastError();
     }
-    status=machine_result==3010?L"旧版被占用的文件将稍后清理；不会自动重启。":machine_result==33?L"新版已安装；旧版本已按安全范围处理，个人设置和未知文件保留。":L"任务已完成。";
+    status=machine_result==3010?L"旧版被占用的文件将稍后清理；不会自动重启。":machine_result==33?L"新版已安装；部分旧版本尚未完全移除，已保留相关文件。可查看诊断。":L"任务已完成。";
     if(configuration_failed)status=uninstall?L"程序已卸载，部分用户文件或启动项未能清理。请查看诊断。":L"程序已安装，但当前用户配置未完成。请查看诊断；可打开设置检查方案。";
     else if(cleanup_result){status=L"新版已安装，部分旧文件正在使用或不可写，已保留。可查看诊断。";result=cleanup_result;}
     else result=machine_result;

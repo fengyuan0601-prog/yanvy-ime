@@ -4,6 +4,8 @@
 #include "registration_flow.hpp"
 #include <iostream>
 #include <stdexcept>
+#include <array>
+#include <objbase.h>
 
 namespace {
 struct InstalledState {
@@ -22,9 +24,51 @@ struct InstalledState {
 void Require(bool value, const char* detail) {
   if (!value) throw std::runtime_error(detail);
 }
+struct PreviousStates {
+  std::array<InstalledState,2> entries{};
+  bool current=true,unrelated=true;int query_failure=-1,queries=0,removals=0;
+  size_t Index(const yanvy::PreviousTextService& identity){
+    for(size_t index=0;index<std::size(yanvy::kPreviousTextServices);++index){
+      const auto& known=yanvy::kPreviousTextServices[index];
+      if(*identity.service==*known.service&&*identity.profile==*known.profile&&wcscmp(identity.clsid,known.clsid)==0)return index;
+    }
+    throw std::runtime_error("retirement requested an unknown identity");
+  }
+  HRESULT Present(const yanvy::PreviousTextService& identity,bool& present){
+    const auto index=Index(identity);++queries;if(int(index)==query_failure)return E_ACCESSDENIED;
+    present=entries[index].profile;return S_OK;
+  }
+  HRESULT Remove(const yanvy::PreviousTextService& identity){++removals;return yanvy::UnregisterTextService(entries[Index(identity)]);}
+};
 }
 int wmain() {
   try {
+    Require(std::size(yanvy::kPreviousTextServices)==2,"both previous generations must be listed");
+    for(const auto& previous:yanvy::kPreviousTextServices){
+      Require(*previous.service!=yanvy::kService&&*previous.profile!=yanvy::kProfile,"current identity is in retirement list");
+      GUID parsed{};Require(SUCCEEDED(CLSIDFromString(previous.clsid,&parsed))&&parsed==*previous.service,"previous CLSID text differs from binary GUID");
+    }
+    Require(yanvy::kPreviousService!=yanvy::kLegacyService,"previous release and rc identities overlap");
+    GUID current{};Require(SUCCEEDED(CLSIDFromString(yanvy::kClsid,&current))&&current==yanvy::kService,"current CLSID text differs from binary GUID");
+    for(unsigned combination=0;combination<4;++combination){
+      PreviousStates states;states.entries[0].profile=(combination&1)!=0;states.entries[1].profile=(combination&2)!=0;
+      bool present=false;Require(yanvy::PreviousTextServicePresent(states,present)==S_OK&&present==(combination!=0),"rollback presence missed a previous generation");
+      Require(states.removals==0&&states.current&&states.unrelated,"read-only presence changed registration");
+    }
+    {
+      PreviousStates states;states.entries[0].profile=false;states.query_failure=1;bool present=false;
+      Require(yanvy::PreviousTextServicePresent(states,present)==E_ACCESSDENIED,"legacy query error was hidden");
+      Require(states.removals==0,"failed query modified a previous profile");
+    }
+    for(size_t failed=0;failed<2;++failed){
+      PreviousStates states;states.entries[failed].fail_at=1;
+      Require(yanvy::RetirePreviousTextServices(states)==E_ACCESSDENIED,"retirement failure was hidden");
+      Require(states.entries[failed].profile&&states.entries[failed].com,"failed old profile lost its COM registration");
+      Require(states.current&&states.unrelated&&states.removals==int(failed+1),"retirement crossed a failure or touched unrelated identity");
+      states.entries[failed].fail_at=0;
+      Require(yanvy::RetirePreviousTextServices(states)==S_OK,"two-generation cleanup could not retry");
+      Require(!states.entries[0].profile&&!states.entries[1].profile&&states.current&&states.unrelated,"cleanup missed previous identity or touched current");
+    }
     for (int fail = 1; fail <= 4; ++fail) {
       InstalledState state; state.fail_at = fail;
       Require(yanvy::UnregisterTextService(state) == E_ACCESSDENIED,"removal error was hidden");
@@ -37,7 +81,7 @@ int wmain() {
       Require(!state.profile && !state.categories && !state.com && !state.startup,"retry left owned entries");
       Require(yanvy::UnregisterTextService(state) == S_OK,"already-absent cleanup failed");
     }
-    std::cout << "registration cleanup: PASS (four failures, retry and absent-entry cases; no system mutation)\n";
+    std::cout << "registration cleanup: PASS (two previous identities, read-only rollback checks, failure preservation, retry and absent-entry cases; no system mutation)\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
