@@ -117,7 +117,10 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       RefreshPreference();
       if (context_.Get() != context) { Cancel(); BindContext(context); }
       if (key == VK_SPACE && Down(VK_CONTROL)) {
-        ToggleInputMode(); *eaten = TRUE; return S_OK;
+        // Holding the shortcut must not toggle back on each autorepeat.
+        // LPARAM bit 30 is the key's previous state, as for WM_KEYDOWN.
+        if (!(lp & (LPARAM(1) << 30))) ToggleInputMode();
+        *eaten = TRUE; return S_OK;
       }
       if (key == VK_F12 && Down(VK_CONTROL) && Down(VK_SHIFT)) {
         Cancel();if(schema_){last_pinyin_schema_=schema_;schema_=0;}else schema_=last_pinyin_schema_;
@@ -229,7 +232,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   bool Interested(ITfContext* context, WPARAM key) {
     if (!manager_ || Disabled(context)) return false;
     if (Down(VK_LWIN) || Down(VK_RWIN) || Down(VK_MENU)) return false;
-    if (key == VK_SPACE && Down(VK_CONTROL)) return true;
+    if (key == VK_SPACE && Down(VK_CONTROL) && !Down(VK_SHIFT)) return true;
     if (key == VK_F12 && Down(VK_CONTROL) && Down(VK_SHIFT)) return true;
     if (Down(VK_CONTROL) || ascii_) return false;
     if (key >= 'A' && key <= 'Z') return !(GetKeyState(VK_CAPITAL) & 1);

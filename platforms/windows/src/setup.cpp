@@ -143,6 +143,19 @@ HRESULT Unregister(bool machine) {
   RegistrationRemoval removal{machine};
   return yanvy::UnregisterTextService(removal);
 }
+HRESULT StopPreviousBrokers(const std::wstring& sid, DWORD session) {
+  if (sid.empty()) return E_INVALIDARG;
+  HRESULT result = S_OK;
+  // rc.2/rc.3 use v2 and are covered by the current broker's legacy bridge.
+  // Leaving their event out lets their engine survive upgrades indefinitely.
+  for (const auto version : {L"v2", L"v3", L"v4", L"v5", L"v6"}) {
+    const auto name = std::wstring(L"Local\\Stop-YANVY-") + version + L"-" + sid + L"-" + std::to_wstring(session);
+    HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, name.c_str());
+    if (event) { if (!SetEvent(event)) result = HRESULT_FROM_WIN32(GetLastError()); CloseHandle(event); }
+    else if (GetLastError() != ERROR_FILE_NOT_FOUND) result = HRESULT_FROM_WIN32(GetLastError());
+  }
+  return result;
+}
 }
 #ifndef YANVY_SETUP_REGISTRY_FIXTURE
 int wmain(int argc, wchar_t** argv) {
@@ -160,15 +173,7 @@ int wmain(int argc, wchar_t** argv) {
     const auto sid = yanvy::UserSid();
     DWORD session = 0;
     if (sid.empty() || !ProcessIdToSessionId(GetCurrentProcessId(), &session)) hr = E_FAIL;
-    else {
-      hr = S_OK;
-      for (const auto version : {L"v3", L"v4", L"v5", L"v6"}) {
-        const auto name = std::wstring(L"Local\\Stop-YANVY-") + version + L"-" + sid + L"-" + std::to_wstring(session);
-        HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, name.c_str());
-        if (event) { if (!SetEvent(event)) hr = HRESULT_FROM_WIN32(GetLastError()); CloseHandle(event); }
-        else if (GetLastError() != ERROR_FILE_NOT_FOUND) hr = HRESULT_FROM_WIN32(GetLastError());
-      }
-    }
+    else hr = StopPreviousBrokers(sid,session);
   }
   else if (option == L"--check-dependencies") {
     // Load the packaged engine explicitly before starting the server. Missing

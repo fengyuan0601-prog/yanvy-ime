@@ -51,18 +51,44 @@ int wmain() {
         };
         ComPtr<Context> context; context.Attach(new Context);
         auto service=new Service;
+        // SetKeyboardState affects this fixture thread's keyboard queue only;
+        // it sends no desktop input and changes no system input profile.
+        BYTE saved[256]{}, local[256]{};
+        const bool keyboard_ready = GetKeyboardState(saved) && SetKeyboardState(local);
         auto chinese = [&]() { BOOL eaten=FALSE; return SUCCEEDED(service->OnTestKeyDown(context.Get(),VK_OEM_1,0,&eaten)) && eaten; };
         auto toggle = [&]() { BOOL eaten=FALSE; return SUCCEEDED(service->OnPreservedKey(context.Get(),yanvy::kToggleEnglish,&eaten)) && eaten; };
-        if (set_open(true)) {
+        if (keyboard_ready && set_open(true)) {
           service->BeginModeFixture(manager.Get(),client);
           // Service shortcut to English, OS change back to Chinese, repeated;
           // also verify the service callback can switch in both directions.
-          const bool ok=chinese() && set_open(false) && !chinese() && set_open(true) && chinese() &&
+          bool ok=chinese() && set_open(false) && !chinese() && set_open(true) && chinese() &&
             toggle() && !chinese() && set_open(true) && chinese() &&
             toggle() && !chinese() && set_open(true) && chinese() &&
             toggle() && !chinese() && toggle() && chinese();
+          local[VK_CONTROL]=local[VK_LCONTROL]=local[VK_SPACE]=0x80;
+          BOOL eaten=FALSE;
+          auto open_is = [&](bool expected) {
+            VARIANT value; VariantInit(&value);
+            const bool matches = SUCCEEDED(openclose->GetValue(&value)) &&
+                value.vt==VT_I4 && (value.lVal!=0)==expected;
+            VariantClear(&value); return matches;
+          };
+          ok = SetKeyboardState(local) && ok;
+          ok = SUCCEEDED(service->OnKeyDown(context.Get(),VK_SPACE,0,&eaten)) && eaten && ok;
+          ok = open_is(false) && ok;
+          ok = SUCCEEDED(service->OnKeyDown(context.Get(),VK_SPACE,LPARAM(1) << 30,&eaten)) && eaten && ok;
+          if (!open_is(false)) { std::cerr << "FAIL auto-repeat toggled the input mode twice\n"; ok=false; }
+          service->OnKeyUp(context.Get(),VK_SPACE,0,&eaten);
+          ok = SUCCEEDED(service->OnKeyDown(context.Get(),VK_SPACE,0,&eaten)) && eaten && open_is(true) && ok;
+          ok = SUCCEEDED(service->OnKeyDown(context.Get(),VK_SPACE,LPARAM(1) << 30,&eaten)) && eaten && open_is(true) && ok;
+          service->OnKeyUp(context.Get(),VK_SPACE,0,&eaten);
+          local[VK_SHIFT]=local[VK_LSHIFT]=0x80;
+          ok = SetKeyboardState(local) && ok;
+          service->OnTestKeyDown(context.Get(),VK_SPACE,0,&eaten);
+          if (eaten) { std::cerr << "FAIL Ctrl+Shift+Space was intercepted\n"; ok=false; }
           service->EndModeFixture(); result=ok ? 0 : 1;
         }
+        if (keyboard_ready) SetKeyboardState(saved);
         service->Release();
       }
       manager->Deactivate();

@@ -65,14 +65,20 @@ void VerifyProfile(const fs::path& shared, const fs::path& user) {
     for (const char* suffix : {".schema.yaml", ".table.bin", ".prism.bin", ".reverse.bin"})
       build_names.insert(std::string(id) + suffix);
   for (const auto& entry : fs::directory_iterator(user)) {
+    // Windows directory junctions are reparse points, but is_symlink() can
+    // report false for them. Check metadata and compiled caches as well as
+    // the pinned source files before Rime can follow or write through them.
+    NoSymlink(entry.path());
     const auto name = entry.path().filename().string();
     if (entry.is_symlink() || !user_names.count(name))
       throw std::runtime_error("Refusing unexpected user schema, script, or saved dictionary.");
     if (name == "build") {
       if (!entry.is_directory()) throw std::runtime_error("Invalid compiled data directory.");
-      for (const auto& cache : fs::directory_iterator(entry.path()))
+      for (const auto& cache : fs::directory_iterator(entry.path())) {
+        NoSymlink(cache.path());
         if (cache.is_symlink() || !cache.is_regular_file() || !build_names.count(cache.path().filename().string()))
           throw std::runtime_error("Refusing unexpected compiled data or script.");
+      }
     } else if (!entry.is_regular_file()) {
       throw std::runtime_error("Invalid user configuration file type.");
     }

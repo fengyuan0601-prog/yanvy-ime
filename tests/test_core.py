@@ -160,6 +160,37 @@ def main():
                 destination.symlink_to(user / "pinyin_simp.custom.yaml")
             attack("symlinked_privacy_patch", symlink_patch, immutable=True)
 
+        if sys.platform == "win32":
+            # Junctions do not require Developer Mode/admin rights and are not
+            # classified as symlinks by all Windows C++ runtimes. Keep both
+            # ends in this disposable fixture, and unlink the junction before
+            # TemporaryDirectory's recursive cleanup can inspect it.
+            profile = base / "attack-build-junction"
+            shutil.copytree(user, profile)
+            junction = profile / "build"
+            target = base / "redirected-build"
+            assert junction.resolve().is_relative_to(base.resolve())
+            assert target.resolve().is_relative_to(base.resolve())
+            junction.rename(target)
+            env = dict(os.environ, YANVY_TEST_JUNCTION_PATH=str(junction),
+                       YANVY_TEST_JUNCTION_TARGET=str(target))
+            try:
+                subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                    "$ErrorActionPreference='Stop'; New-Item -ItemType Junction "
+                    "-Path $env:YANVY_TEST_JUNCTION_PATH -Target $env:YANVY_TEST_JUNCTION_TARGET | Out-Null"],
+                    env=env, check=True, capture_output=True, timeout=30)
+                assert junction.resolve() == target.resolve()
+                before = inventory(target)
+                result = run([], profile=profile, expect_success=False)
+                check("junctioned_build_rejected_before_session",
+                      result.returncode != 0 and '"ready":true' not in result.stdout)
+                check("junction_target_not_modified", before == inventory(target))
+            finally:
+                # rmdir removes a Windows junction itself, not its target.
+                if junction.exists():
+                    os.rmdir(junction)
+            check("junction_cleanup_preserved_target", target.is_dir() and bool(inventory(target)))
+
         report = {"tested_at_utc": datetime.now(timezone.utc).isoformat(),
                   "scope": f"Native {sys.platform} librime core only; no Windows TSF/mobile integration was tested.",
                   "engine": "librime", "engine_version": version,
