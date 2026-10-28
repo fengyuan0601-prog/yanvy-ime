@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// Isolated event test: never names a real user's broker or stops a process.
+// Isolated event/process test: never names or stops a real user's broker.
 #define YANVY_SETUP_REGISTRY_FIXTURE
 #define YANVY_BROKER_UPGRADE_FIXTURE
 #include "../src/setup.cpp"
 #include <array>
+#include <fstream>
 
 namespace {
 yanvy::UpgradeBrokerObjects FixtureObjects(const std::wstring& suffix){
@@ -21,6 +22,11 @@ int FixtureBroker(const std::wstring& suffix){
   if(!stop.value||!connected.value||pipe.value==INVALID_HANDLE_VALUE)return 24;
   OVERLAPPED connection{};connection.hEvent=connected.value;
   if(!ConnectNamedPipe(pipe.value,&connection)&&GetLastError()!=ERROR_IO_PENDING)return 25;
+  // Model a broker caching the configured dictionary directory at startup.
+  // These files are synthetic fixture state in the private copied runtime.
+  const auto root=yanvy::ModuleDir();
+  std::ifstream location(root/L"fixture-data-root.txt");
+  if(location){std::string value;std::getline(location,value);std::ofstream(root/L"fixture-data-observed.txt")<<value;}
   yanvy::UpgradeHandle ready(OpenEventW(EVENT_MODIFY_STATE,FALSE,ReadyName(suffix).c_str()));
   if(!ready.value||!SetEvent(ready.value))return 26;
   const DWORD waited=WaitForSingleObject(stop.value,30000);
@@ -60,7 +66,6 @@ int UpgradeFixture(const std::filesystem::path& root){
   auto wrong=snapshot;++wrong.created;
   if(yanvy::StopCapturedUpgradeBroker(wrong,old_root,new_root,names,1500)!=E_ACCESSDENIED)return 37;
   if(yanvy::StopCapturedUpgradeBroker(snapshot,new_root,old_root,names,1500)!=E_ACCESSDENIED)return 38;
-  if(yanvy::StopCapturedUpgradeBroker(snapshot,old_root,old_root,names,1500)!=S_FALSE)return 39;
   DWORD session=0;ProcessIdToSessionId(GetCurrentProcessId(),&session);
   if(yanvy::UpgradeProcessMatches(old.process,snapshot.pid,old_root/L"YANVY-Server.exe",L"not-this-user",session)||
       yanvy::UpgradeProcessMatches(old.process,snapshot.pid,old_root/L"YANVY-Server.exe",yanvy::UserSid(),session+1))return 40;
@@ -74,12 +79,31 @@ int UpgradeFixture(const std::filesystem::path& root){
     if(!different.Start(new_root/L"YANVY-Server.exe",other))return 47;
     if(yanvy::VerifyCurrentUpgradeBroker(old_root,FixtureObjects(other),1500)!=E_ACCESSDENIED)return 48;
   }
+  std::ofstream(new_root/L"fixture-data-root.txt")<<"old-dictionary";
   Child current;if(!current.Start(new_root/L"YANVY-Server.exe",suffix))return 44;
-  if(yanvy::VerifyCurrentUpgradeBroker(new_root,names,1500)!=S_OK)return 49;
   if(yanvy::StopCapturedUpgradeBroker(snapshot,old_root,new_root,names,1500)!=S_FALSE)return 45;
   yanvy::UpgradeHandle new_stop(OpenEventW(SYNCHRONIZE,FALSE,names.stop.c_str()));
   if(!new_stop.value||WaitForSingleObject(new_stop.value,0)!=WAIT_TIMEOUT||WaitForSingleObject(current.process,0)!=WAIT_TIMEOUT)return 46;
-  std::cout<<"same-protocol upgrade: captured old broker cooperatively exits; PID/time/path/user/session checks, pinned singleton and replacement-broker isolation PASS\n";
+  // Reinstalling the same executable into the same runtime can still move its
+  // data. It must restart the captured broker before old data can be cleaned.
+  yanvy::UpgradeBrokerSnapshot repair;
+  if(yanvy::CaptureUpgradeBroker(new_root,new_root,repair)!=S_OK||repair.pid!=GetProcessId(current.process))return 50;
+  auto wrong_repair=repair;++wrong_repair.created;
+  if(yanvy::StopCapturedUpgradeBroker(wrong_repair,new_root,new_root,names,1500)!=E_ACCESSDENIED||
+      WaitForSingleObject(current.process,0)!=WAIT_TIMEOUT)return 58;
+  auto cached_data=[&]{std::ifstream file(new_root/L"fixture-data-observed.txt");std::string value;std::getline(file,value);return value;};
+  if(cached_data()!="old-dictionary")return 51;
+  std::ofstream(new_root/L"fixture-data-root.txt")<<"new-dictionary";
+  if(cached_data()!="old-dictionary")return 52;
+  CloseHandle(new_stop.value);new_stop.value=nullptr;
+  barrier_pinned=false;yanvy::upgrade_fixture_after_exit=CheckPinnedBarrier;
+  if(yanvy::StopCapturedUpgradeBroker(repair,new_root,new_root,names,1500)!=S_OK||!barrier_pinned)return 53;
+  yanvy::upgrade_fixture_after_exit=nullptr;
+  if(WaitForSingleObject(current.process,0)!=WAIT_OBJECT_0)return 54;
+  Child repaired;if(!repaired.Start(new_root/L"YANVY-Server.exe",suffix))return 55;
+  if(cached_data()!="new-dictionary"||yanvy::VerifyCurrentUpgradeBroker(new_root,names,1500)!=S_OK)return 56;
+  if(yanvy::StopCapturedUpgradeBroker(repair,new_root,new_root,names,1500)!=S_FALSE||WaitForSingleObject(repaired.process,0)!=WAIT_TIMEOUT)return 57;
+  std::cout<<"same-protocol and same-runtime data relocation: captured broker cooperatively exits; PID/time/path/user/session checks, pinned singleton, cached-data refresh and replacement-broker isolation PASS\n";
   return 0;
 }
 }

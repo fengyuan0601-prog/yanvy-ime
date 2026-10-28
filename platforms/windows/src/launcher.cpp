@@ -6,6 +6,8 @@
 #include <objbase.h>
 #include <shlobj.h>
 #include "machine_store.hpp"
+#include "package_integrity.hpp"
+#include "installer_transaction.hpp"
 
 namespace {
 #ifndef YANVY_PREVIEW_ONLY
@@ -20,6 +22,21 @@ int Worker(HINSTANCE instance,bool uninstall,const std::filesystem::path& target
   DWORD lock_error=GetLastError();
   if(!lock||lock_error==ERROR_ALREADY_EXISTS){if(lock)CloseHandle(lock);return ERROR_BUSY;}
   struct Release { HANDLE handle;~Release(){CloseHandle(handle);} } release{lock};
+  // This flag is set only by this worker after comparing the existing runtime
+  // with the manifest embedded in THIS installer, never its BUILD-INFO.json.
+  if(!SetEnvironmentVariableW(L"YANVY_REPAIR_VERIFIED",L"0"))return 40;
+  if(!uninstall){
+    yanvy::PackageManifest manifest;if(!yanvy::LoadPackageManifest(instance,manifest))return 40;
+    const auto destination=yanvy::InspectPackageDestination(machine,manifest,false);
+    if(destination==yanvy::PackageDestination::rejected)return yanvy::kPackageMismatch;
+    if(destination==yanvy::PackageDestination::reusable){
+      std::error_code inspect_error;
+      const auto uninstaller=machine/L"Uninstall-core.exe";
+      const bool present=std::filesystem::exists(uninstaller,inspect_error);
+      if(inspect_error||(present&&(!std::filesystem::is_regular_file(uninstaller,inspect_error)||inspect_error))||!yanvy::PackagePathWithoutReparse(uninstaller))return yanvy::kPackageMismatch;
+      if(!SetEnvironmentVariableW(L"YANVY_REPAIR_VERIFIED",L"1"))return 40;
+    }
+  }
   // Elevated executables and NSIS scratch files require protected ancestors,
   // not merely a protected child underneath a user-writable TEMP directory.
   GUID unique{};wchar_t name[40]{};
@@ -61,6 +78,31 @@ int Worker(HINSTANCE instance,bool uninstall,const std::filesystem::path& target
 int DataWorker(HINSTANCE instance,const std::filesystem::path& target,bool cleanup){
   if(IsUserAnAdmin())return ERROR_ELEVATION_REQUIRED;
   if(!yanvy::ValidInstallPath(target))return 10;
+  yanvy::InstallerTransaction cleanup_transaction;
+  if(cleanup){
+    // Even a directly invoked cleanup worker must not remove data committed by
+    // another setup. Hold the machine transaction marker across check/delete.
+    const DWORD locked=cleanup_transaction.Acquire(L"Global\\YANVY.Setup.Transaction");if(locked)return int(locked);
+    wchar_t registered[32768]{};DWORD length=sizeof(registered);
+    const LSTATUS read=RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YANVY-dev",L"InstallLocation",RRF_RT_REG_SZ|RRF_SUBKEY_WOW6464KEY,nullptr,registered,&length);
+    if(read==ERROR_SUCCESS){
+      const auto runtime=std::filesystem::path(registered);
+      if(FAILED(yanvy::ValidateMachineRuntime(runtime)))return ERROR_ACCESS_DENIED;
+      const auto metadata=runtime/L"installation.ini";const DWORD attributes=GetFileAttributesW(metadata.c_str());
+      if(attributes==INVALID_FILE_ATTRIBUTES||(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))return ERROR_ACCESS_DENIED;
+      wchar_t selected[32768]{};GetPrivateProfileStringW(L"paths",L"data_root",L"",selected,DWORD(std::size(selected)),metadata.c_str());
+      const auto data=selected[0]?std::filesystem::path(selected):runtime;
+      if(!yanvy::PlainLocalPath(data)||yanvy::InstallationReferencesData(target,data))return ERROR_BUSY;
+    }else if(read!=ERROR_FILE_NOT_FOUND&&read!=ERROR_PATH_NOT_FOUND)return int(read);
+  }
+  if(!cleanup){
+    yanvy::PackageManifest manifest;if(!yanvy::LoadPackageManifest(instance,manifest))return 40;
+    const auto destination=yanvy::InspectPackageDestination(target,manifest,true);
+    if(destination==yanvy::PackageDestination::rejected)return yanvy::kPackageMismatch;
+    // No ownership of existing files is acquired: a later UAC cancellation or
+    // registration failure must never invoke this attempt's data rollback.
+    if(destination==yanvy::PackageDestination::reusable)return yanvy::kDataReused;
+  }
   auto resource=FindResourceW(instance,MAKEINTRESOURCEW(103),RT_RCDATA);
   if(!resource)return 40;
   auto bytes=LockResource(LoadResource(instance,resource));DWORD size=SizeofResource(instance,resource);

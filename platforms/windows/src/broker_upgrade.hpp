@@ -35,8 +35,11 @@ inline bool UpgradeProcessMatches(HANDLE process,DWORD pid,const std::filesystem
 }
 inline HRESULT CaptureUpgradeBroker(const std::filesystem::path& previous,const std::filesystem::path& current,UpgradeBrokerSnapshot& snapshot){
   snapshot={};
-  if(previous.empty()||SameMachinePath(previous,current))return S_FALSE;
-  if(!previous.is_absolute()||previous.lexically_normal()!=previous)return E_INVALIDARG;
+  if(previous.empty())return S_FALSE;
+  if(!previous.is_absolute()||previous.lexically_normal()!=previous||
+      !current.is_absolute()||current.lexically_normal()!=current)return E_INVALIDARG;
+  // Repair can retain the executable path while changing its data directory.
+  // Capture that exact running instance so it cannot keep reading old data.
   const auto expected=previous/L"YANVY-Server.exe";const auto sid=UserSid();DWORD session=0;
   if(sid.empty()||!ProcessIdToSessionId(GetCurrentProcessId(),&session))return E_FAIL;
   UpgradeHandle list(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0));
@@ -59,8 +62,9 @@ inline void(*upgrade_fixture_after_exit)()=nullptr;
 #endif
 inline HRESULT StopCapturedUpgradeBroker(const UpgradeBrokerSnapshot& snapshot,const std::filesystem::path& previous,
     const std::filesystem::path& current,const UpgradeBrokerObjects& objects,DWORD timeout=10000){
-  if(!snapshot.pid||!snapshot.created||previous.empty()||SameMachinePath(previous,current))return S_FALSE;
-  if(!previous.is_absolute()||previous.lexically_normal()!=previous)return E_INVALIDARG;
+  if(!snapshot.pid||!snapshot.created||previous.empty())return S_FALSE;
+  if(!previous.is_absolute()||previous.lexically_normal()!=previous||
+      !current.is_absolute()||current.lexically_normal()!=current)return E_INVALIDARG;
   UpgradeHandle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,snapshot.pid));
   if(!process.value){const auto error=GetLastError();return error==ERROR_INVALID_PARAMETER?S_FALSE:HRESULT_FROM_WIN32(error);}
   if(WaitForSingleObject(process.value,0)==WAIT_OBJECT_0)return S_FALSE;

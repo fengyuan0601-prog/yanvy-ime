@@ -31,7 +31,9 @@ def main():
     ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)
     scenarios=('x86-check-failure','check-failure','check-crash','registration-failure','rollback-failure',
                'rollback-unregister-failure','legacy-registration-failure','legacy-rollback-failure',
-               'success','unicode-success','unsafe-previous','retire-failure','uninstall-failure','wrong-runtime-target')
+               'success','unicode-success','unsafe-previous','retire-failure','uninstall-failure','wrong-runtime-target','metadata-failure',
+               'repair-success','repair-relocate','repair-register-failure','repair-metadata-failure',
+               'repair-locked-dll','repair-missing-uninstaller','repair-without-verification')
     if a.scenario and not set(a.scenario).issubset(scenarios):parser.error('Unknown scenario')
     for scenario in scenarios:
         if a.scenario and scenario not in a.scenario:continue
@@ -71,6 +73,16 @@ def main():
             for folder in (stage,old):
                 (folder/'YANVY-TSF.dll').write_bytes(b'synthetic COM target; never loaded')
             previous_files={p.name:p.read_bytes() for p in old.iterdir()}
+        repairing=scenario.startswith('repair-')
+        if repairing:
+            (stage/'YANVY-TSF.dll').write_bytes(b'synthetic locked COM target; never loaded')
+            for path in stage.iterdir():shutil.copy2(path,new/path.name)
+            (new/'installation.ini').write_text('[paths]\ndata_root='+str(root/'previous data')+'\n[unknown]\nkeep=old-data-pointer\n')
+            (new/'settings.ini').write_text('[display]\nfont_size=23\ntheme=2\nunknown=preserve\n[input]\nschema=0\n')
+            (new/'keep.txt').write_text('unknown same-version file must survive')
+            if scenario!='repair-missing-uninstaller':(new/'Uninstall-core.exe').write_bytes(b'old generated uninstall bytes; never execute')
+            if scenario=='repair-register-failure':(new/'repair-register-result.txt').write_text('1')
+            repair_before={p.name:p.read_bytes() for p in new.iterdir()}
         (root/'stage-version.nsh').write_text('!define YANVY_VERSION "0.1.0-rc.1"\n!define YANVY_WINDOWS_VERSION "0.1.0.3"\n')
         (root/'stage-uninstall.nsh').write_text('\n'.join('Delete /REBOOTOK "$INSTDIR\\'+p.name+'"' for p in stage.iterdir())+'\n')
         source=(ROOT/'platforms/windows/installer/yanvy.nsi').read_text(encoding='utf-8-sig')
@@ -82,34 +94,79 @@ def main():
         source=source.replace(runtime,str(new))
         icon=str(ROOT/'assets/brand/yanvy.ico')
         source=source.replace('..\\..\\..\\assets\\brand\\yanvy.ico',icon)
+        if scenario in ('metadata-failure','repair-metadata-failure'):
+            point='; TEST_POINT_AFTER_INSTALL_METADATA'
+            assert source.count(point)==1
+            source=source.replace(point,'SetErrors ; injected metadata failure after real INI writes')
         script=root/'transaction.nsi';script.write_text(source,encoding='utf-8-sig')
         assert PRODUCT_KEY not in source and ' HKLM ' not in source and '$SMPROGRAMS' not in source and '$PROGRAMFILES64' not in source
         installer=root/'transaction.exe'
         subprocess.run([str(a.makensis),'/V2',f'/DSTAGE={stage}',f'/DOUTPUT={installer}',str(script)],check=True,timeout=30)
         if scenario!='rollback-unregister-failure':
             with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,key_path,0,winreg.KEY_WRITE|winreg.KEY_WOW64_64KEY) as key:
-                winreg.SetValueEx(key,'InstallLocation',0,winreg.REG_SZ,str(old));winreg.SetValueEx(key,'DisplayVersion',0,winreg.REG_SZ,'fixture-old')
+                winreg.SetValueEx(key,'InstallLocation',0,winreg.REG_SZ,str(new if repairing else old));winreg.SetValueEx(key,'DisplayVersion',0,winreg.REG_SZ,'0.1.0-rc.1' if repairing else 'fixture-old')
         env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',YANVY_PREVIOUS_CAN_CLEAN='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
+        env['YANVY_REPAIR_VERIFIED']='1' if repairing and scenario!='repair-without-verification' else '0'
+        if repairing:
+            env['YANVY_SETUP_SCHEMA']='1'
+            env['YANVY_DATA_LOCATION']=str(root/('new data' if scenario=='repair-relocate' or scenario=='repair-metadata-failure' else 'previous data'))
+        elif scenario=='metadata-failure':
+            env['YANVY_SETUP_SCHEMA']='1'
+            env['YANVY_DATA_LOCATION']=str(root/'new data')
         # Match the native launcher: NSIS requires /D= last and unquoted,
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(root/'forbidden target' if scenario=='wrong-runtime-target' else new)
-        result=subprocess.run(install_command,env=env,timeout=90)
-        expected=23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario in ('registration-failure','legacy-registration-failure') else 31 if scenario.startswith('rollback-') or scenario=='legacy-rollback-failure' else 33 if scenario in ('unsafe-previous','retire-failure') else 41 if scenario=='wrong-runtime-target' else 0
+        locked=None
+        if scenario=='repair-locked-dll':
+            api=ctypes.windll.kernel32
+            api.CreateFileW.argtypes=[ctypes.c_wchar_p,ctypes.c_uint32,ctypes.c_uint32,ctypes.c_void_p,ctypes.c_uint32,ctypes.c_uint32,ctypes.c_void_p]
+            api.CreateFileW.restype=ctypes.c_void_p
+            api.CloseHandle.argtypes=[ctypes.c_void_p]
+            locked=api.CreateFileW(str(new/'YANVY-TSF.dll'),0x80000000,1,None,3,0,None)
+            assert locked not in (None,ctypes.c_void_p(-1).value)
+        try:result=subprocess.run(install_command,env=env,timeout=90)
+        finally:
+            if locked is not None:api.CloseHandle(locked)
+        expected=11 if scenario=='repair-without-verification' else 23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario in ('registration-failure','legacy-registration-failure','metadata-failure') else 31 if scenario.startswith('rollback-') or scenario in ('legacy-rollback-failure','repair-register-failure','repair-metadata-failure') else 33 if scenario in ('unsafe-previous','retire-failure') else 41 if scenario=='wrong-runtime-target' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
         assert not old_trace,(scenario,'old executable was invoked')
-        if scenario=='wrong-runtime-target':
+        if repairing:
+            assert read_key('InstallLocation')==str(new)
+            assert read_key('DisplayVersion')=='0.1.0-rc.1'
+            if scenario=='repair-without-verification':
+                assert {p.name:p.read_bytes() for p in new.iterdir()}==repair_before
+            else:
+                trace=(new/'fixture-trace.txt').read_text()
+                assert trace=='repair-register\n'+('' if expected==31 else 'retire\n'),trace
+                if expected==31:
+                    assert {p.name:p.read_bytes() for p in new.iterdir() if p.name!='fixture-trace.txt'}==repair_before, 'repair failure changed existing runtime or metadata'
+                else:
+                    for name,content in repair_before.items():
+                        if name not in ('installation.ini','settings.ini','Uninstall-core.exe'):
+                            assert (new/name).read_bytes()==content,name
+                    data=ctypes.create_unicode_buffer(32768)
+                    read_ini=ctypes.windll.kernel32.GetPrivateProfileStringW
+                    read_ini.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_uint32,ctypes.c_wchar_p]
+                    read_ini.restype=ctypes.c_uint32
+                    read_ini('paths','data_root','',data,len(data),str(new/'installation.ini'))
+                    assert data.value==env['YANVY_DATA_LOCATION'],data.value
+                    assert 'keep=old-data-pointer' in (new/'installation.ini').read_text()
+                    assert 'unknown=preserve' in (new/'settings.ini').read_text()
+                    assert (new/'Uninstall-core.exe').read_bytes()[:2]==b'MZ'
+        elif scenario=='wrong-runtime-target':
             assert not new.exists() and not (root/'forbidden target').exists()
             assert read_key('InstallLocation')==str(old)
         elif scenario in ('x86-check-failure','check-failure','check-crash'):
             assert not old_trace and read_key('InstallLocation')==str(old)
             assert (old/'YANVY-Setup.exe').exists() and (old/'Uninstall.exe').exists()
             assert not (new/'YANVY-Setup.exe').exists()
-        elif scenario in ('registration-failure','legacy-registration-failure'):
+        elif scenario in ('registration-failure','legacy-registration-failure','metadata-failure'):
             assert read_key('InstallLocation')==str(old)
             assert (old/'YANVY-Setup.exe').exists() and (old/'Uninstall.exe').exists()
             assert read_key('DisplayVersion')=='fixture-old'
-            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'+('restore\n' if scenario=='registration-failure' else '')
+            assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'+('restore\n' if scenario in ('registration-failure','metadata-failure') else '')
+            if scenario=='metadata-failure':assert not (new/'settings.ini').exists() and not (new/'installation.ini').exists()
         elif scenario.startswith('rollback-') or scenario=='legacy-rollback-failure':
             assert (new/'YANVY-Setup.exe').exists() and (new/'Uninstall-core.exe').exists()
             assert (new/'fixture-trace.txt').read_text()=='check\nregister\nunregister\n'+('restore\n' if scenario=='rollback-failure' else '')

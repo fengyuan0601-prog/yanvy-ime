@@ -43,6 +43,11 @@ Var RemovalFailed
 Var CleanupWarning
 Var DataDir
 Var LegacyProfile
+Var RepairMode
+Var RepairBackupReady
+Var RepairHadInstallation
+Var RepairHadSettings
+Var RepairHadUninstaller
 
 Function .onInit
   ReadEnvStr $0 "YANVY_SETUP_TEMP_READY"
@@ -71,6 +76,8 @@ FunctionEnd
 
 Section "言舟 Windows 输入法"
   StrCpy $RegistrationAttempted 0
+  StrCpy $RepairMode 0
+  StrCpy $RepairBackupReady 0
   StrCpy $LegacyProfile 1
   StrCpy $FailureCode 20
   SetRegView 64
@@ -96,10 +103,51 @@ Section "言舟 Windows 输入法"
     FindClose $1
     Goto install_files
   existing_owned:
+    ; The protected native worker compares this exact package's embedded
+    ; file hashes before granting reuse. Never infer trust from a marker.
+    ReadEnvStr $0 "YANVY_REPAIR_VERIFIED"
+    ${If} $0 == "1"
+      StrCpy $RepairMode 1
+      Goto repair_existing
+    ${EndIf}
     SetErrorLevel 11
     IfSilent +2
-    MessageBox MB_OK|MB_ICONINFORMATION "当前版本已经安装。可以直接使用，或先卸载后重新安装；个人设置会保留。"
+    MessageBox MB_OK|MB_ICONINFORMATION "现有文件未通过当前安装包的完整性验证，已保留原文件。请查看安装诊断。"
     Abort
+  repair_existing:
+    ; Reconfigure a verified, intact installation without overwriting loaded
+    ; binaries. Keep byte-for-byte copies of both metadata files until commit.
+    StrCpy $RepairHadInstallation 0
+    StrCpy $RepairHadSettings 0
+    StrCpy $RepairHadUninstaller 0
+    ClearErrors
+    InitPluginsDir
+    IfErrors repair_failed
+    IfFileExists "$INSTDIR\installation.ini" 0 +4
+      StrCpy $RepairHadInstallation 1
+      CopyFiles /SILENT "$INSTDIR\installation.ini" "$PLUGINSDIR\repair-installation.ini"
+      IfErrors repair_failed
+    IfFileExists "$INSTDIR\settings.ini" 0 +4
+      StrCpy $RepairHadSettings 1
+      CopyFiles /SILENT "$INSTDIR\settings.ini" "$PLUGINSDIR\repair-settings.ini"
+      IfErrors repair_failed
+    IfFileExists "$INSTDIR\Uninstall-core.exe" 0 +4
+      StrCpy $RepairHadUninstaller 1
+      CopyFiles /SILENT "$INSTDIR\Uninstall-core.exe" "$PLUGINSDIR\repair-uninstall.exe"
+      IfErrors repair_failed
+    StrCpy $RepairBackupReady 1
+    ClearErrors
+    ExecWait '"$INSTDIR\YANVY-Setup.exe" --repair-register --machine' $0
+    IfErrors repair_failed
+    ${If} $0 != 0
+      Goto repair_failed
+    ${EndIf}
+    ; This generated file is not in the staged immutable-file manifest.
+    ; Rebuild it from this trusted payload; never execute its previous bytes.
+    ClearErrors
+    WriteUninstaller "$INSTDIR\Uninstall-core.exe"
+    IfErrors repair_failed
+    Goto write_metadata
   install_files:
   StrCpy $FailureCode 21
   ClearErrors
@@ -172,10 +220,15 @@ Section "言舟 Windows 输入法"
     MessageBox MB_OK|MB_ICONSTOP "Windows TSF 注册失败。请确认已允许管理员授权；安装程序将回退此次注册。"
     Goto rollback
   ${EndIf}
-  ; Data has been extracted by the original, unelevated user. Only this
+  write_metadata:
+  ; Data has been prepared or verified by the original, unelevated user. Only this
   ; pointer is stored here; the administrator worker never writes that path.
+  ClearErrors
   WriteINIStr "$INSTDIR\installation.ini" "paths" "data_root" "$DataDir"
+  IfErrors rollback
   ReadEnvStr $0 "YANVY_SETUP_SCHEMA"
+  ; A missing optional schema is not a file-write failure.
+  ClearErrors
   IntFmt $1 "%u" $0
   ${If} $0 == $1
   ${AndIf} $0 >= 0
@@ -188,6 +241,8 @@ Section "言舟 Windows 输入法"
       ${EndIf}
     ${EndIf}
   ${EndIf}
+  ; TEST_POINT_AFTER_INSTALL_METADATA
+  IfErrors rollback
   ClearErrors
   CreateDirectory "$SMPROGRAMS\言舟 YANVY"
   CreateShortcut "$SMPROGRAMS\言舟 YANVY\言舟设置.lnk" "$INSTDIR\YANVY-Settings.exe"
@@ -289,6 +344,9 @@ Section "言舟 Windows 输入法"
   ${EndIf}
   Goto done
   rollback:
+    ${If} $RepairMode == 1
+      Goto repair_failed
+    ${EndIf}
     ; Do not unregister the working old version if extraction or validation
     ; failed before attempting registration of the new version.
     ${If} $RegistrationAttempted == 1
@@ -365,9 +423,35 @@ Section "言舟 Windows 输入法"
     RMDir "$INSTDIR\profile\build"
     RMDir "$INSTDIR\profile"
     Delete "$INSTDIR\installation.ini"
+    Delete "$INSTDIR\settings.ini"
     Delete "$INSTDIR\Uninstall-core.exe"
     RMDir "$INSTDIR"
     SetErrorLevel $FailureCode
+    Abort
+  repair_failed:
+    ; Registration repair never unregisters a working profile or deletes its
+    ; runtime. A new data pointer must not survive a failed metadata transaction.
+    ${If} $RepairBackupReady == 1
+      ClearErrors
+      ${If} $RepairHadInstallation == 1
+        CopyFiles /SILENT "$PLUGINSDIR\repair-installation.ini" "$INSTDIR\installation.ini"
+      ${Else}
+        Delete "$INSTDIR\installation.ini"
+      ${EndIf}
+      ${If} $RepairHadSettings == 1
+        CopyFiles /SILENT "$PLUGINSDIR\repair-settings.ini" "$INSTDIR\settings.ini"
+      ${Else}
+        Delete "$INSTDIR\settings.ini"
+      ${EndIf}
+      ${If} $RepairHadUninstaller == 1
+        CopyFiles /SILENT "$PLUGINSDIR\repair-uninstall.exe" "$INSTDIR\Uninstall-core.exe"
+      ${Else}
+        Delete "$INSTDIR\Uninstall-core.exe"
+      ${EndIf}
+    ${EndIf}
+    ; Conservatively retain newly prepared user data too: a registration or
+    ; metadata error can be partial. The UI treats 31 as preservation required.
+    SetErrorLevel 31
     Abort
   rollback_incomplete:
     ; The registered COM path may still refer to this installation. Do not

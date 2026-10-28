@@ -88,7 +88,8 @@ def main():
               "rc9":"Legacy named-pipe compatibility and isolated x86 COM, mode and real-engine IPC tests. Real 32-bit and other application acceptance remains pending. See docs/RC9-READINESS.md",
               "0.1.0_system_upgrade":"2026-10-29: rc.9 to 0.1.0 real administrator upgrade passed; 74 installed file hashes matched; x64/x86 COM and registration passed; one new broker; old profile retired. User confirmed Codex Chinese and Ctrl+Space round trips. User then reported tray menu displacement; do not treat that menu as accepted.",
               "0.1.1_system_upgrade":"2026-10-29: real upgrade passed, 74 installed file hashes matched, current-version broker ownership verified; user confirmed menu placement. User then requested native brand plus Chinese/English mode button instead of a duplicate notification icon.",
-              "current_system_upgrade_and_application_matrix":"0.1.2 replaces the independent notification icon with a native TSF input-mode button. Native button visibility, left-click mode switching and right-click settings require installed verification; no claim of universal application compatibility"}}
+              "0.1.2_system_upgrade":"2026-10-29: installed fixed files matched all 74 staged hashes. User reported native button or clicks still failed and repeating the installer rejected the populated data directory; do not treat these interactions as accepted.",
+              "current_system_upgrade_and_application_matrix":"0.1.3 adds exact-package data/runtime reuse, registration repair and native SHOWNINTRAY visibility. Isolated integrity, repeat-install and registration fixtures cover the repaired paths; actual 0.1.3 installation, native button clicks and application acceptance remain pending; no claim of universal application compatibility"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY "+VERSION+"\n"+commit+"\n",encoding="utf-8")
     (a.stage.parent/(a.stage.name+"-version.nsh")).write_text(
@@ -108,6 +109,14 @@ def main():
                 or (relative.parts[0]=='licenses' and f.suffix.lower() not in denied)
                 or (len(relative.parts)==1 and f.name in ('TESTING.txt','BUILD-INFO.json')))
     data_files=[f for f in files if in_user_payload(f)]
+    # Embed this independent allowlist in the public installer. Never trust an
+    # existing destination's BUILD-INFO.json to authorize privileged reuse.
+    data_set=set(data_files)|{a.stage/"YANVY-INSTALL-MARKER.txt"}
+    manifest_lines=['YANVY-PACKAGE-MANIFEST 1']
+    manifest_lines += [('D' if f in data_set else 'R')+'\t'+hashlib.sha256(f.read_bytes()).hexdigest()+'\t'+
+                       f.relative_to(a.stage).as_posix() for f in files]
+    with (a.stage.parent/(a.stage.name+"-package-manifest.txt")).open('w',encoding='utf-8',newline='\n') as manifest_file:
+        manifest_file.write("\n".join(manifest_lines)+"\n")
     data_lines=['; Exact user-data cleanup; marker is checked and removed by user_data.nsi.']
     data_lines += ['Delete "$INSTDIR\\'+str(f.relative_to(a.stage)).replace('/','\\')+'"' for f in data_files]
     data_lines += ['IfErrors 0 +2','StrCpy $CleanupFileError 1','ClearErrors']

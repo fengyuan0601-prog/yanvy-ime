@@ -30,6 +30,7 @@ int wmain(int argc,wchar_t** argv){
     int result=0;std::ifstream(root/L"validate-result.txt")>>result;return result;
   }
   if(option==L"--register")category="register";else if(option==L"--unregister")category="unregister";
+  else if(option==L"--repair-register")category="repair-register";
   else if(option==L"--unregister-current")category="unregister";
   else if(option==L"--restore-registration")category="restore";
   else if(option==L"--retire-legacy")category="retire";

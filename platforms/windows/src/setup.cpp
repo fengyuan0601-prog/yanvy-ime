@@ -46,7 +46,53 @@ HRESULT DeleteComClass(HKEY hive, REGSAM view, const wchar_t* clsid=yanvy::kClsi
   if (error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND) return S_OK;
   return HRESULT_FROM_WIN32(error);
 }
-[[maybe_unused]] HRESULT Register(bool machine, const std::filesystem::path& runtime = yanvy::ModuleDir()) {
+struct RegistrationInstall {
+  HKEY hive;
+  std::filesystem::path dll,dll32;
+  const std::wstring key=std::wstring(L"Software\\Classes\\CLSID\\")+yanvy::kClsid;
+  ComPtr<ITfInputProcessorProfileMgr> profiles;
+  ComPtr<ITfCategoryMgr> category;
+  size_t categories_registered=0;
+  HRESULT WriteComServer() {
+    HRESULT hr=SetString(hive,key,nullptr,yanvy::kName);
+    if(SUCCEEDED(hr))hr=SetString(hive,key+L"\\InprocServer32",nullptr,dll.wstring());
+    if(SUCCEEDED(hr))hr=SetString(hive,key+L"\\InprocServer32",L"ThreadingModel",L"Apartment");
+    if(SUCCEEDED(hr))hr=SetString(hive,key,nullptr,yanvy::kName,KEY_WOW64_32KEY);
+    if(SUCCEEDED(hr))hr=SetString(hive,key+L"\\InprocServer32",nullptr,dll32.wstring(),KEY_WOW64_32KEY);
+    if(SUCCEEDED(hr))hr=SetString(hive,key+L"\\InprocServer32",L"ThreadingModel",L"Apartment",KEY_WOW64_32KEY);
+    return hr;
+  }
+  HRESULT RegisterProfile() {
+    HRESULT hr=CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
+    if(SUCCEEDED(hr))hr=profiles->RegisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,
+        yanvy::kName,ULONG(wcslen(yanvy::kName)),dll.c_str(),ULONG(dll.wstring().size()),0,nullptr,0,TRUE,0);
+    std::cout<<"register_profile=0x"<<std::hex<<static_cast<unsigned long>(hr)<<'\n';
+    return hr;
+  }
+  HRESULT RegisterCategories() {
+    HRESULT hr=CoCreateInstance(CLSID_TF_CategoryMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&category));
+    if(SUCCEEDED(hr))for(auto guid:categories){
+      hr=category->RegisterCategory(yanvy::kService,*guid,yanvy::kService);
+      std::cout<<"register_category=0x"<<std::hex<<static_cast<unsigned long>(hr)<<'\n';
+      if(FAILED(hr))break;
+      ++categories_registered;
+    }
+    return hr;
+  }
+  HRESULT RemoveProfile() {
+    return profiles?profiles->UnregisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,0):S_OK;
+  }
+  HRESULT RemoveRegisteredCategories() {
+    if(category)for(size_t index=0;index<categories_registered;++index){
+      const HRESULT hr=category->UnregisterCategory(yanvy::kService,*categories[index],yanvy::kService);
+      if(FAILED(hr))return hr;
+    }
+    return S_OK;
+  }
+  void RemoveComServer(){DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY);}
+};
+[[maybe_unused]] HRESULT Register(bool machine,const std::filesystem::path& runtime=yanvy::ModuleDir(),
+    yanvy::RegistrationMode mode=yanvy::RegistrationMode::fresh) {
   const auto dll = runtime / L"YANVY-TSF.dll";
   const auto dll32 = runtime / L"YANVY-TSF-x86.dll";
   std::error_code file_error;
@@ -54,38 +100,8 @@ HRESULT DeleteComClass(HKEY hive, REGSAM view, const wchar_t* clsid=yanvy::kClsi
   // A protected legacy directory can still contain an older, incompatible
   // service CLSID. Verify the target before touching any working registration.
   HRESULT identity=VerifyServiceIdentity(dll);if(FAILED(identity))return identity;
-  const std::wstring key = std::wstring(L"Software\\Classes\\CLSID\\") + yanvy::kClsid;
-  const HKEY hive = machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  HRESULT hr = SetString(hive,key,nullptr,yanvy::kName);
-  if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",nullptr,dll.wstring());
-  if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",L"ThreadingModel",L"Apartment");
-  if (SUCCEEDED(hr)) hr = SetString(hive,key,nullptr,yanvy::kName,KEY_WOW64_32KEY);
-  if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",nullptr,dll32.wstring(),KEY_WOW64_32KEY);
-  if (SUCCEEDED(hr)) hr = SetString(hive,key+L"\\InprocServer32",L"ThreadingModel",L"Apartment",KEY_WOW64_32KEY);
-  if (FAILED(hr)) { DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY);return hr; }
-  ComPtr<ITfInputProcessorProfileMgr> profiles;
-  hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
-  if (SUCCEEDED(hr)) hr = profiles->RegisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,
-      yanvy::kName,ULONG(wcslen(yanvy::kName)),dll.c_str(),ULONG(dll.wstring().size()),0,nullptr,0,TRUE,0);
-  std::cout << "register_profile=0x" << std::hex << static_cast<unsigned long>(hr) << '\n';
-  ComPtr<ITfCategoryMgr> category;
-  size_t categories_registered=0;
-  if (SUCCEEDED(hr)) hr = CoCreateInstance(CLSID_TF_CategoryMgr,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&category));
-  if (SUCCEEDED(hr)) for (auto guid : categories) {
-    hr = category->RegisterCategory(yanvy::kService,*guid,yanvy::kService);
-    std::cout << "register_category=0x" << std::hex << static_cast<unsigned long>(hr) << '\n';
-    if (FAILED(hr)) break;
-    ++categories_registered;
-  }
-  if (FAILED(hr)) {
-    HRESULT cleanup = profiles ? profiles->UnregisterProfile(yanvy::kService,yanvy::kLanguage,yanvy::kProfile,0) : S_OK;
-    if (SUCCEEDED(cleanup) && category) for (size_t index=0;index<categories_registered;++index) {
-      cleanup = category->UnregisterCategory(yanvy::kService,*categories[index],yanvy::kService);
-      if (FAILED(cleanup)) break;
-    }
-    if (SUCCEEDED(cleanup)) { DeleteComClass(hive,KEY_WOW64_32KEY);DeleteComClass(hive,KEY_WOW64_64KEY); }
-  }
-  return hr;
+  RegistrationInstall operations{machine?HKEY_LOCAL_MACHINE:HKEY_CURRENT_USER,dll,dll32};
+  return yanvy::RegisterTextService(operations,mode);
 }
 [[maybe_unused]] HRESULT EnableUserProfile() {
   // Called by the original unelevated installer UI, not its UAC worker.
@@ -217,6 +233,12 @@ int wmain(int argc, wchar_t** argv) {
   if (option == L"--register" && machine && argc==3) {
     hr = yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
     if(SUCCEEDED(hr))hr = Register(true);
+  }
+  else if(option==L"--repair-register"&&machine&&argc==3){
+    // The installer already verified all package bytes before choosing repair.
+    // Recheck protection here, and never undo existing entries on a failure.
+    hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    if(SUCCEEDED(hr))hr=Register(true,yanvy::ModuleDir(),yanvy::RegistrationMode::repair);
   }
   else if (option == L"--restore-registration" && machine && argc==4) {
     // Recovery runs this trusted helper, never a previous installation's exe.

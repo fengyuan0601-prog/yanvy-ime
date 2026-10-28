@@ -4,6 +4,25 @@
 #include "ids.hpp"
 
 namespace yanvy {
+enum class RegistrationMode { fresh, repair };
+// Repair runs only after the caller validates the identical protected runtime.
+// Its writes repeat the fixed registration values; a failure must not remove
+// a profile, category or COM server that the existing installation still uses.
+template<class Operations> HRESULT RegisterTextService(Operations& operations,RegistrationMode mode) {
+  HRESULT hr=operations.WriteComServer();
+  if(FAILED(hr)){
+    if(mode==RegistrationMode::fresh)operations.RemoveComServer();
+    return hr;
+  }
+  hr=operations.RegisterProfile();
+  if(SUCCEEDED(hr))hr=operations.RegisterCategories();
+  if(FAILED(hr)&&mode==RegistrationMode::fresh){
+    HRESULT cleanup=operations.RemoveProfile();
+    if(SUCCEEDED(cleanup))cleanup=operations.RemoveRegisteredCategories();
+    if(SUCCEEDED(cleanup))operations.RemoveComServer();
+  }
+  return hr;
+}
 // Stop at the first failed removal. In particular a rejected TSF removal
 // must leave the COM server and startup entry available to the installed IME.
 // Operations must tolerate already-absent owned entries so a partial cleanup

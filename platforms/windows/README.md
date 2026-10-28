@@ -1,6 +1,6 @@
 # Windows 原生输入法
 
-版本：0.1.2，Windows 11 x64 桌面系统。安装包未签名；0.1.0/0.1.1 已完成本机真实升级，用户确认 Codex 中中文及双向中英切换正常、菜单定位修复有效；本轮移除独立托盘，改用 Windows 原生“中/英”模式按钮并继续最终验证。实际完成范围见 docs/RELEASE-AUDIT-2026-10-28.md。旧候选版记录作为历史证据保留。
+版本：0.1.3，Windows 11 x64 桌面系统。安装包未签名；0.1.0/0.1.1 已完成本机真实升级，用户确认 Codex 中中文及双向中英切换正常、菜单定位修复有效。0.1.2 实装后仍有原生按钮反馈，且重复安装被已有目录拒绝；本轮补齐系统栏标志，支持完整同包重复安装与注册修复，继续实机验证。实际完成范围见 docs/RELEASE-AUDIT-2026-10-28.md。旧候选版记录作为历史证据保留。
 
 此版本为 Windows x64 系统同时提供 x64 与 x86 TSF 组件；32 位 Office/WPS 和其他真实应用尚未实测，不承诺所有应用可用。
 
@@ -38,7 +38,7 @@ python scripts/package_windows.py --build build/windows --build-x86 build/window
 E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /INPUTCHARSET UTF8 /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-payload.exe platforms/windows/installer/yanvy.nsi
 $commit = git rev-parse HEAD
 E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /INPUTCHARSET UTF8 /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-user-data.exe /DCLEANUP=E:\Codex\Temp\yanvy-stage-unique-data-uninstall.nsh /DSOURCE_COMMIT=$commit platforms/windows/installer/user_data.nsi
-cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe -DNSIS_DATA_PAYLOAD=E:/Codex/Temp/yanvy-user-data.exe
+cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe -DNSIS_DATA_PAYLOAD=E:/Codex/Temp/yanvy-user-data.exe -DYANVY_PACKAGE_MANIFEST=E:/Codex/Temp/yanvy-stage-unique-package-manifest.txt
 cmake --build build/windows --target YANVY-Installer
 ```
 

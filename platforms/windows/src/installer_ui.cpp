@@ -7,6 +7,8 @@
 #include "installer_diagnostics.hpp"
 #include "user_cleanup.hpp"
 #include "broker_upgrade.hpp"
+#include "package_integrity.hpp"
+#include "installer_transaction.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
@@ -32,6 +34,14 @@ bool ValidInstallPath(const std::filesystem::path& path){
   return true;
 }
 namespace {
+DWORD ReadPreviousInstallation(std::filesystem::path& runtime,std::filesystem::path& data){
+  runtime.clear();data.clear();wchar_t previous[32768]{};DWORD bytes=sizeof(previous);
+  const LSTATUS read=RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YANVY-dev",L"InstallLocation",RRF_RT_REG_SZ|RRF_SUBKEY_WOW6464KEY,nullptr,previous,&bytes);
+  if(read==ERROR_FILE_NOT_FOUND||read==ERROR_PATH_NOT_FOUND)return ERROR_SUCCESS;
+  if(read!=ERROR_SUCCESS)return DWORD(read);
+  runtime=std::filesystem::path(previous);data=SUCCEEDED(ValidateMachineRuntime(runtime))?InstalledDataRoot(runtime):runtime;
+  return ERROR_SUCCESS;
+}
 std::filesystem::path DefaultInstall(){
   auto preferred=std::filesystem::path(L"E:\\Codex\\Programs");
   if(GetDriveTypeW(L"E:\\")==DRIVE_FIXED&&std::filesystem::is_directory(preferred))return SelectDefaultInstall(true,{});
@@ -41,6 +51,7 @@ std::filesystem::path DefaultInstall(){
 }
 constexpr int primary_id=101,secondary_id=102,browse_id=103,notes_id=104,settings_id=105;
 struct View {
+  InstallerTransaction transaction;
   HINSTANCE instance{};HWND window{},primary{},secondary{},browse{},notes{},settings{},progress{},heading{},status_control{},path_control{};
   HWND schema_box{};uint32_t schema=1;
   UINT dpi=96;int page=0;bool uninstall=false,preview=false;DWORD result=0;HANDLE worker=nullptr;
@@ -138,11 +149,13 @@ struct View {
   void Browse(){
     Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
     if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return;
-    dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择词库目录（非空目录将创建言舟版本子目录）");
+    dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择词库目录（可复用本安装包的完整词库）");
     auto parent=target.parent_path().parent_path();Microsoft::WRL::ComPtr<IShellItem> start;if(SUCCEEDED(SHCreateItemFromParsingName(parent.c_str(),nullptr,IID_PPV_ARGS(&start))))dialog->SetFolder(start.Get());
     if(SUCCEEDED(dialog->Show(window))){Microsoft::WRL::ComPtr<IShellItem> item;PWSTR value=nullptr;
       if(SUCCEEDED(dialog->GetResult(&item))&&SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&value))){auto selected=std::filesystem::path(value);CoTaskMemFree(value);
-        std::error_code error;if(!std::filesystem::is_empty(selected,error)||error)selected=ResolveInstallPath(selected);
+        std::error_code error;const bool empty=std::filesystem::is_empty(selected,error)&&!error;
+        PackageManifest manifest;const bool reusable=!empty&&LoadPackageManifest(instance,manifest)&&InspectPackageDestination(selected,manifest,true)==PackageDestination::reusable;
+        selected=ResolveSelectedInstallPath(selected,empty,reusable);
         if(ValidInstallPath(selected)){target=selected;status=L"可直接修改上方完整路径；设置和缓存单独保存。";}else status=L"请选择本地普通文件夹，不使用网络路径或链接。";Refresh();}}
   }
   std::filesystem::path Runtime()const{return uninstall?ModuleDir():MachineRuntimeRoot(kVersion);}
@@ -168,8 +181,10 @@ struct View {
     // from a previous failed attempt to the newly selected directory.
     configuration_failed=false;data_prepared=false;result=0;machine_result=0;cleanup_result=0;cleanup_done=false;broker_checked=false;diagnostic_phase=InstallerPhase::unknown;
     if(!ValidInstallPath(target)){result=10;status=L"位置无效：请选择本地普通文件夹。";page=3;Refresh();return;}
-    if(!uninstall){std::error_code error;if(std::filesystem::exists(target,error)&&(!std::filesystem::is_directory(target,error)||!std::filesystem::is_empty(target,error))){result=10;status=L"此目录已有文件。请更改位置，选择新的空目录。";page=3;Refresh();return;}}
-    else uninstall_data=InstalledDataRoot(Runtime());
+    const auto sid=UserSid();if(sid.empty()){Fail(ERROR_ACCESS_DENIED);return;}
+    const DWORD locked=transaction.Acquire(L"Global\\YANVY.Setup.User."+sid);if(locked){Fail(locked);return;}
+    if(!uninstall){const DWORD read=ReadPreviousInstallation(previous_install,previous_data);if(read){Fail(read);return;}}
+    if(uninstall)uninstall_data=InstalledDataRoot(Runtime());
     if(!uninstall){const HRESULT captured=CaptureUpgradeBroker(previous_install,Runtime(),upgrade_broker);if(FAILED(captured)){Fail(DWORD(captured));return;}}
     status=uninstall?L"正在卸载系统组件…":L"正在准备所选位置的离线词库…";
     const bool started=uninstall?StartMachine():Spawn(Self(),L"--worker-prepare-data \""+target.wstring()+L"\"",Stage::prepare_data);
@@ -178,7 +193,8 @@ struct View {
   std::wstring FailureText()const{
     if(result==ERROR_CANCELLED)return uninstall?L"已取消管理员授权，未执行卸载。":L"已取消管理员授权。词库准备内容将安全回退。";
     if(result==10)return L"目录已有文件，或不是有效的本地词库位置。";
-    if(result==11)return L"当前版本已经安装。可以直接使用，或先卸载后重新安装。";
+    if(result==11)return L"已有安装未通过同包完整性确认，原文件已保留。请查看诊断。";
+    if(result==kPackageMismatch)return L"已有文件不属于同一完整安装包，已保留。可更换词库目录；系统组件异常请查看诊断。";
     if(result==20||result==21)return L"文件处理失败，请检查所选目录的磁盘空间和权限。";
     if(result==23)return L"组件或系统依赖无法加载，请查看诊断。";
     if(result==24||result==25||result==26||result==29||result==32)return L"词库检查未通过，请查看诊断中的完整错误类别。";
@@ -197,7 +213,7 @@ struct View {
       if(Spawn(Self(),L"--worker-cleanup-data \""+target.wstring()+L"\"",Stage::cleanup_data))return;
       status+=L" 词库清理未完成，原文件已保留。";
     }
-    page=3;stage=Stage::none;Refresh();
+    page=3;stage=Stage::none;transaction.Release();Refresh();
   }
   bool UserStep(const wchar_t* executable,const std::wstring& args,Stage next){
     if(FAILED(ValidateMachineRuntime(Runtime()))){SetLastError(ERROR_ACCESS_DENIED);return false;}
@@ -207,7 +223,12 @@ struct View {
     page=2;stage=Stage::none;
     const bool runtime_trusted=uninstall||SUCCEEDED(ValidateMachineRuntime(Runtime()));
     if(!runtime_trusted){configuration_failed=true;result=ERROR_ACCESS_DENIED;}
-    if(!cleanup_done&&runtime_trusted){
+    if(!uninstall&&runtime_trusted&&!broker_checked){
+      broker_checked=true;StartBroker(Runtime());status=L"正在确认新版引擎已启动…";
+      if(UserStep(L"YANVY-Setup.exe",L"--verify-current-broker",Stage::verify_broker))return;
+      configuration_failed=true;result=GetLastError();
+    }
+    if(!cleanup_done&&runtime_trusted&&MayCleanupPreviousInstallation(uninstall,configuration_failed,broker_checked)){
       cleanup_done=true;
       const auto clean=[&](const std::filesystem::path& path,bool data_only){
         if(path.empty()||SameMachinePath(path,Runtime())||(!uninstall&&SameMachinePath(path,target)))return;
@@ -220,21 +241,16 @@ struct View {
         else if(!configuration_failed)diagnostic_phase=InstallerPhase::cleanup;
       }
     }
-    if(!uninstall&&runtime_trusted&&!broker_checked){
-      broker_checked=true;StartBroker(Runtime());status=L"正在确认新版引擎已启动…";
-      if(UserStep(L"YANVY-Setup.exe",L"--verify-current-broker",Stage::verify_broker))return;
-      configuration_failed=true;result=GetLastError();
-    }
     status=machine_result==3010?L"旧版被占用的文件将稍后清理；不会自动重启。":machine_result==33?L"新版已安装；部分旧版本尚未完全移除，已保留相关文件。可查看诊断。":L"任务已完成。";
     if(configuration_failed)status=uninstall?L"程序已卸载，部分用户文件或启动项未能清理。请查看诊断。":L"程序已安装，但当前用户配置未完成。请查看诊断；可打开设置检查方案。";
     else if(cleanup_result){status=L"新版已安装，部分旧文件正在使用或不可写，已保留。可查看诊断。";result=cleanup_result;}
     else result=machine_result;
-    Refresh();
+    transaction.Release();Refresh();
   }
   void Complete(DWORD code){
     const auto finished=stage;stage=Stage::none;
-    if(finished==Stage::cleanup_data){if(code==0)data_prepared=false;else status+=L" 词库清理未完成，文件已保留。";page=3;Refresh();return;}
-    if(finished==Stage::prepare_data){if(code!=0){Fail(code);return;}data_prepared=true;if(!StartMachine())Fail(GetLastError());return;}
+    if(finished==Stage::cleanup_data){if(code==0)data_prepared=false;else status+=L" 词库清理未完成，文件已保留。";page=3;transaction.Release();Refresh();return;}
+    if(finished==Stage::prepare_data){if(!PreparedDataAccepted(code)){Fail(code);return;}data_prepared=PreparedDataOwnedByAttempt(code);if(!StartMachine())Fail(GetLastError());return;}
     if(finished==Stage::machine){
       machine_result=code;
       if(code!=0&&code!=3010&&code!=33){Fail(code);return;}
@@ -316,11 +332,11 @@ int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show){
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_PROGRESS_CLASS|ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
   View view;view.instance=instance;view.uninstall=uninstall;view.preview=preview;if(uninstall)view.target=ModuleDir();
-  else{wchar_t previous[32768]{};DWORD bytes=sizeof(previous);
-    if(RegGetValueW(HKEY_LOCAL_MACHINE,L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YANVY-dev",L"InstallLocation",RRF_RT_REG_SZ|RRF_SUBKEY_WOW6464KEY,nullptr,previous,&bytes)==ERROR_SUCCESS){
-      view.previous_install=std::filesystem::path(previous);
-      view.previous_data=SUCCEEDED(ValidateMachineRuntime(view.previous_install))?InstalledDataRoot(view.previous_install):view.previous_install;
-      view.schema=ReadSchemaPreference(PreferenceRoot(view.previous_install));}}
+  else{
+    if(ReadPreviousInstallation(view.previous_install,view.previous_data)==ERROR_SUCCESS&&!view.previous_install.empty()){
+      view.schema=ReadSchemaPreference(PreferenceRoot(view.previous_install));
+      PackageManifest manifest;const bool reusable=SameMachinePath(view.previous_install,view.Runtime())&&SUCCEEDED(ValidateMachineRuntime(view.previous_install))&&ValidInstallPath(view.previous_data)&&LoadPackageManifest(instance,manifest)&&InspectPackageDestination(view.previous_data,manifest,true)==PackageDestination::reusable;
+      view.target=SelectExistingInstallData(view.target,view.previous_install,view.Runtime(),view.previous_data,reusable);}}
   WNDCLASSW wc{};wc.hInstance=instance;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Setup.rc1";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));RegisterClassW(&wc);
   UINT dpi=GetDpiForSystem();RECT rect{0,0,MulDiv(720,int(dpi),96),MulDiv(480,int(dpi),96)};DWORD style=WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX;AdjustWindowRectExForDpi(&rect,style,FALSE,0,dpi);
   HWND window=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,uninstall?L"言舟 · 卸载":L"言舟 · 安装",style,CW_USEDEFAULT,CW_USEDEFAULT,rect.right-rect.left,rect.bottom-rect.top,nullptr,nullptr,instance,&view);
@@ -331,7 +347,7 @@ int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show){
 }
 int RenderInstaller(HINSTANCE instance,const std::filesystem::path& output,UINT dpi,int page){
   if(dpi<96||dpi>288||page<0||page>4||std::filesystem::exists(output))return 2;
-  View v;v.instance=instance;v.dpi=dpi;v.page=page==4?0:page;v.uninstall=page==4;v.Fonts();v.status=page==3?L"目录已有文件。请更改位置，选择新的空目录。":page==2?L"任务已完成。":page==1?L"正在处理，请稍候…":page==4?L"卸载将请求 Windows 管理员授权。":L"免费开源 · 未签名；安装时将请求管理员授权。";
+  View v;v.instance=instance;v.dpi=dpi;v.page=page==4?0:page;v.uninstall=page==4;v.Fonts();v.result=page==3?kPackageMismatch:0;v.status=page==3?v.FailureText():page==2?L"任务已完成。":page==1?L"正在处理，请稍候…":page==4?L"卸载将请求 Windows 管理员授权。":L"免费开源 · 未签名；安装时将请求管理员授权。";
   HDC screen=GetDC(nullptr),dc=CreateCompatibleDC(screen);HBITMAP bitmap=CreateCompatibleBitmap(screen,v.D(720),v.D(480));auto old=SelectObject(dc,bitmap);v.Draw(dc,false);SelectObject(dc,old);DeleteDC(dc);ReleaseDC(nullptr,screen);
   int result=1;{Gdiplus::Bitmap png(bitmap,nullptr);CLSID encoder{0x557cf406,0x1a04,0x11d3,{0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};if(png.Save(output.c_str(),&encoder,nullptr)==Gdiplus::Ok)result=0;}DeleteObject(bitmap);return result;
 }

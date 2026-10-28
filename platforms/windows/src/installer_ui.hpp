@@ -16,6 +16,12 @@ inline std::filesystem::path ResolveInstallPath(const std::filesystem::path& sel
   if(_wcsicmp(selected.filename().c_str(),L"YANVY")==0)return selected/kVersion;
   return selected/L"YANVY"/kVersion;
 }
+inline std::filesystem::path SelectExistingInstallData(const std::filesystem::path& fallback,const std::filesystem::path& previous_runtime,const std::filesystem::path& current_runtime,const std::filesystem::path& previous_data,bool verified){
+  return verified&&SameMachinePath(previous_runtime,current_runtime)?previous_data:fallback;
+}
+inline std::filesystem::path ResolveSelectedInstallPath(const std::filesystem::path& selected,bool empty,bool reusable){
+  return empty||reusable?selected:ResolveInstallPath(selected);
+}
 bool ValidInstallPath(const std::filesystem::path& path);
 int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show);
 int RenderInstaller(HINSTANCE instance,const std::filesystem::path& output,UINT dpi,int page);
