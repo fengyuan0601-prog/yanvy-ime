@@ -87,6 +87,12 @@ TSF identity 夹具使用真实 ITfKeystrokeMgr 注册释放事件，实际 Simu
 
 最终 x64/x86 按钮夹具各 100 项通过，覆盖左/右键分工、状态通知、图标所有权、16/24/32/48/64 像素字形和模块存活；两架构真实 Service 模式往返、私有 compartment、隔离 COM 身份与 preserved-key 路由检查通过。注册与两代旧身份清理夹具均通过。上述夹具没有实际点击生产任务栏。
 
+### 0.1.2 实装反馈与后续修正
+
+用户安装提交 `298cdb9c554a1d3cfa291bbf2773cfa655079fa3` 的 0.1.2 后反馈按钮或点击仍有问题，尚待区分具体表现。只读检查确认 74 项文件哈希一致、受保护运行目录检查通过、profile 注册并启用、x64/x86 COM 加载通过、新版后台已接管、两代旧 COM 身份已退役。因此安装成功不能等同于原生按钮验收通过，发行仍保留草稿。
+
+对照 [Microsoft SampleIME LanguageBar.cpp](https://github.com/microsoft/Windows-classic-samples/blob/main/Samples/IME/cpp/SampleIME/LanguageBar.cpp)，发现按钮信息遗漏 `TF_LBI_STYLE_SHOWNINTRAY`。官方示例在构造与 GetInfo 中均设置该标志；本轮已补齐并增加契约回归。反例在修改前失败，修改后 x64/x86 按钮各 101 项及 TSF-Mode 通过。该修正尚未作为新包实装，也不能据此认定用户现场根因已经确认。
+
 ## 最终验收需确认的范围
 
 - 使用本轮安装包完成真实管理员安装/升级/卸载，验证原用户词库和设置、任意旧位置的处理、失败回退及安装结果说明。隔离夹具不能替代这一过程。

@@ -34,6 +34,9 @@ struct ITfLangBarItemButton : ITfLangBarItem {
 #define TF_LBI_STYLE_BTN_BUTTON 0x00010000
 #define TF_LBI_STATUS_HIDDEN 0x00000001
 #endif
+#ifndef TF_LBI_STYLE_SHOWNINTRAY
+#define TF_LBI_STYLE_SHOWNINTRAY 0x00000002
+#endif
 
 namespace yanvy {
 // GUID_LBI_INPUTMODE, the one mode item accepted by the Windows Input Indicator.
@@ -71,7 +74,10 @@ class ModeLanguageBar final : public ITfLangBarItemButton,public ITfSource {
       std::function<void()> settings,std::atomic<long>* objects=nullptr)
       :module_pin_(objects),ascii_(ascii),toggle_(std::move(toggle)),settings_(std::move(settings)){
     info_.clsidService=service;info_.guidItem=kNativeInputModeItem;
-    info_.dwStyle=TF_LBI_STYLE_BTN_BUTTON|TF_LBI_STYLE_TEXTCOLORICON|TF_LBI_STYLE_HIDDENSTATUSCONTROL;
+    // Match Microsoft's SampleIME: GUID_LBI_INPUTMODE also advertises its
+    // intended system-tray placement through SHOWNINTRAY in GetInfo.
+    info_.dwStyle=TF_LBI_STYLE_BTN_BUTTON|TF_LBI_STYLE_SHOWNINTRAY|
+        TF_LBI_STYLE_TEXTCOLORICON|TF_LBI_STYLE_HIDDENSTATUSCONTROL;
     lstrcpynW(info_.szDescription,L"言舟中英文切换",TF_LBI_DESC_MAXLEN);
   }
   ~ModeLanguageBar()=default;

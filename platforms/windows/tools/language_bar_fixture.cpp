@@ -79,6 +79,9 @@ int wmain(){
     Check(objects==1,"item pins module");
     TF_LANGBARITEMINFO info{};Check(item->GetInfo(&info)==S_OK&&info.guidItem==yanvy::kNativeInputModeItem&&
         (info.dwStyle&TF_LBI_STYLE_TEXTCOLORICON)&&(info.dwStyle&TF_LBI_STYLE_BTN_BUTTON),"native item identity and theme style");
+    // The official SampleIME advertises SHOWNINTRAY (SDK value 0x2) in GetInfo.
+    // A valid button object alone does not request exposure by the system tray.
+    Check((info.dwStyle&0x00000002)!=0,"GetInfo advertises native system-tray button");
     ComPtr<ITfSource> source;Check(item->QueryInterface(IID_ITfSource,reinterpret_cast<void**>(source.GetAddressOf()))==S_OK,"ITfSource");
     ComPtr<IUnknown> a,b;Check(item->QueryInterface(IID_IUnknown,reinterpret_cast<void**>(a.GetAddressOf()))==S_OK&&
         source->QueryInterface(IID_IUnknown,reinterpret_cast<void**>(b.GetAddressOf()))==S_OK&&a.Get()==b.Get(),"COM identity");a.Reset();b.Reset();
