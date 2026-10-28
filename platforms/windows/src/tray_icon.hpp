@@ -2,6 +2,7 @@
 #pragma once
 #include "common.hpp"
 #include <shellapi.h>
+#include <windowsx.h>
 #include <atomic>
 
 namespace yanvy {
@@ -15,6 +16,30 @@ inline TrayAction TrayActionFor(bool version4, WPARAM wp, LPARAM lp) {
   if ((version4 && event == WM_CONTEXTMENU) || (!version4 && event == WM_RBUTTONUP)) return TrayAction::Menu;
   return TrayAction::None;
 }
+inline bool TrayMenuAnchorFor(bool version4,WPARAM wp,const RECT* icon,const POINT* cursor,POINT& point) {
+  // Version 4 context-menu callbacks carry the click point in wParam, as in
+  // Microsoft's NotificationIcon sample. Keep signed desktop coordinates:
+  // an overflow-panel click is not necessarily at the taskbar icon rectangle.
+  if(version4){
+    const POINT callback_point{GET_X_LPARAM(wp),GET_Y_LPARAM(wp)};
+    if(callback_point.x!=-1||callback_point.y!=-1){point=callback_point;return true;}
+  }
+  // Keyboard context-menu invocations may use the (-1,-1) sentinel. Anchor
+  // those at the icon; legacy callbacks carry only an icon ID in wParam.
+  if(version4&&icon&&icon->left<icon->right&&icon->top<icon->bottom){
+    point={icon->left+(icon->right-icon->left)/2,icon->top+(icon->bottom-icon->top)/2};return true;
+  }
+  if(cursor){point=*cursor;return true;}
+  return false;
+}
+class TrayDpiContext {
+ public:
+  TrayDpiContext():previous_(SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)){}
+  ~TrayDpiContext(){if(previous_)SetThreadDpiAwarenessContext(previous_);}
+  TrayDpiContext(const TrayDpiContext&)=delete;
+  TrayDpiContext& operator=(const TrayDpiContext&)=delete;
+ private:DPI_AWARENESS_CONTEXT previous_;
+};
 // One icon for the per-user broker; the input indicator itself is Windows UI.
 class TrayIcon {
  public:
@@ -55,12 +80,11 @@ class TrayIcon {
         if(action==TrayAction::Menu){
         HMENU menu=CreatePopupMenu();if(!menu)return 0;
         AppendMenuW(menu,MF_STRING,1,L"言舟设置");AppendMenuW(menu,MF_STRING,2,L"隐藏图标（本次运行）");
-        POINT p{};
-        if(self->version4_){
-          NOTIFYICONIDENTIFIER id{sizeof(id)};id.hWnd=window;id.uID=1;RECT rect{};
-          if(SUCCEEDED(Shell_NotifyIconGetRect(&id,&rect))){p.x=(rect.left+rect.right)/2;p.y=(rect.top+rect.bottom)/2;}
-          else GetCursorPos(&p);
-        }else GetCursorPos(&p);
+        POINT p{},cursor{};RECT rect{};
+        NOTIFYICONIDENTIFIER id{sizeof(id)};id.hWnd=window;id.uID=1;
+        const bool has_icon=SUCCEEDED(Shell_NotifyIconGetRect(&id,&rect));
+        const bool has_cursor=GetCursorPos(&cursor)!=FALSE;
+        if(!TrayMenuAnchorFor(self->version4_,wp,has_icon?&rect:nullptr,has_cursor?&cursor:nullptr,p)){DestroyMenu(menu);return 0;}
         SetForegroundWindow(window);
         UINT selected=TrackPopupMenu(menu,TPM_RIGHTBUTTON|TPM_RETURNCMD|TPM_NONOTIFY,p.x,p.y,0,window,nullptr);
         DestroyMenu(menu);PostMessageW(window,WM_NULL,0,0);
@@ -74,6 +98,11 @@ class TrayIcon {
     return DefWindowProcW(window,message,wp,lp);
   }
   static DWORD WINAPI ThreadMain(void* value){
+    // The HWND retains its creator's DPI context for every callback. Set this
+    // before creating it so shell/cursor coordinates and popup placement all
+    // use physical screen pixels, without a second DPI-virtualization scale.
+    // Only this tray thread changes; the broker's other threads are untouched.
+    TrayDpiContext dpi;
     auto self=static_cast<TrayIcon*>(value);HINSTANCE instance=GetModuleHandleW(nullptr);
     WNDCLASSW wc{};wc.hInstance=instance;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Tray.rc4";
     RegisterClassW(&wc);self->taskbar_created_=RegisterWindowMessageW(L"TaskbarCreated");

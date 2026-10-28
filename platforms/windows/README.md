@@ -1,6 +1,6 @@
 # Windows 原生输入法
 
-版本：0.1.0，Windows 11 x64 桌面系统。安装包未签名；当前正在执行最终发布验证，实际完成范围见 docs/RELEASE-AUDIT-2026-10-28.md。旧候选版记录作为历史证据保留。
+版本：0.1.1，Windows 11 x64 桌面系统。安装包未签名；0.1.0 已完成本机真实升级，用户确认 Codex 中中文及双向中英切换正常；本轮修复托盘菜单定位并继续最终验证。实际完成范围见 docs/RELEASE-AUDIT-2026-10-28.md。旧候选版记录作为历史证据保留。
 
 此版本为 Windows x64 系统同时提供 x64 与 x86 TSF 组件；32 位 Office/WPS 和其他真实应用尚未实测，不承诺所有应用可用。
 
@@ -35,9 +35,9 @@ cmake --build build/windows
 
 ```powershell
 python scripts/package_windows.py --build build/windows --build-x86 build/windows-x86 --rime-sdk E:/Codex/Programs/YANVY-Rime-1.10.0-clang --stage E:/Codex/Temp/yanvy-stage-unique
-E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-payload.exe platforms/windows/installer/yanvy.nsi
+E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /INPUTCHARSET UTF8 /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-payload.exe platforms/windows/installer/yanvy.nsi
 $commit = git rev-parse HEAD
-E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-user-data.exe /DCLEANUP=E:\Codex\Temp\yanvy-stage-unique-data-uninstall.nsh /DSOURCE_COMMIT=$commit platforms/windows/installer/user_data.nsi
+E:/Codex/Programs/LocalMedia-NSIS/makensis.exe /INPUTCHARSET UTF8 /DSTAGE=E:\Codex\Temp\yanvy-stage-unique /DOUTPUT=E:\Codex\Temp\yanvy-user-data.exe /DCLEANUP=E:\Codex\Temp\yanvy-stage-unique-data-uninstall.nsh /DSOURCE_COMMIT=$commit platforms/windows/installer/user_data.nsi
 cmake -S platforms/windows -B build/windows -DNSIS_PAYLOAD=E:/Codex/Temp/yanvy-payload.exe -DNSIS_DATA_PAYLOAD=E:/Codex/Temp/yanvy-user-data.exe
 cmake --build build/windows --target YANVY-Installer
 ```

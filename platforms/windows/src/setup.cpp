@@ -6,6 +6,7 @@
 #include "msctf_compat.hpp"
 #include "registration_flow.hpp"
 #include "machine_store.hpp"
+#include "broker_upgrade.hpp"
 #include <wrl/client.h>
 #include <iostream>
 #include <algorithm>
@@ -220,6 +221,10 @@ int wmain(int argc, wchar_t** argv) {
     if(SUCCEEDED(hr))hr = option==L"--retire-legacy"?RetireLegacy(true):Unregister(true,option==L"--unregister");
   }
   else if (option == L"--enable-user" && argc==2) hr=EnableUserProfile();
+  else if (option == L"--verify-current-broker" && argc==2) {
+    hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    if(SUCCEEDED(hr))hr=yanvy::VerifyCurrentUpgradeBroker(yanvy::ModuleDir(),yanvy::CurrentUpgradeBrokerObjects());
+  }
   else if (option == L"--disable-user" && argc==2) {
     hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
     if(SUCCEEDED(hr)){RegistrationRemoval removal{false};hr=removal.RemoveStartup();}
@@ -230,14 +235,26 @@ int wmain(int argc, wchar_t** argv) {
     bool present=false;hr=ProfilePresent(yanvy::kLegacyService,yanvy::kLegacyProfile,present);
     if(SUCCEEDED(hr)&&!present)hr=HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
   }
-  else if (option == L"--stop-previous-brokers") {
+  else if (option == L"--stop-previous-brokers" && (argc==2||argc==5)) {
     // Close the superseded per-user brokers after a successful upgrade so
     // their notification icons cannot coexist with the new one. Do not run
     // executables from the user-selected previous directory as administrator.
     const auto sid = yanvy::UserSid();
     DWORD session = 0;
     if (sid.empty() || !ProcessIdToSessionId(GetCurrentProcessId(), &session)) hr = E_FAIL;
-    else hr = StopPreviousBrokers(sid,session);
+    else {
+      hr=argc==5?yanvy::ValidateMachineRuntime(yanvy::ModuleDir()):S_OK;
+      yanvy::UpgradeBrokerSnapshot snapshot;
+      if(SUCCEEDED(hr)&&argc==5){
+        try{
+          size_t pid_end=0,created_end=0;const auto pid=std::stoull(argv[2],&pid_end),created=std::stoull(argv[3],&created_end);
+          if(pid==0||pid>MAXDWORD||created==0||pid_end!=wcslen(argv[2])||created_end!=wcslen(argv[3]))hr=E_INVALIDARG;
+          else snapshot={DWORD(pid),created};
+        }catch(...){hr=E_INVALIDARG;}
+      }
+      if(SUCCEEDED(hr))hr=StopPreviousBrokers(sid,session);
+      if(SUCCEEDED(hr)&&argc==5)hr=yanvy::StopCapturedUpgradeBroker(snapshot,argv[4],yanvy::ModuleDir(),yanvy::CurrentUpgradeBrokerObjects());
+    }
   }
   else if (option == L"--check-dependencies") {
     // Load the packaged engine explicitly before starting the server. Missing

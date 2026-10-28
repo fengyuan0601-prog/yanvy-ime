@@ -86,7 +86,8 @@ def main():
               "rc7":"Notification-icon version negotiation and event decoding, synthetic upgrade transaction, 35 isolated broker checks, and path checks. Actual taskbar interaction and system upgrade remain unverified. See docs/RC7-READINESS.md",
               "rc8":"Private real TSF compartment mode round trips; Windows real application hotkey interaction remains unverified. See docs/RC8-READINESS.md",
               "rc9":"Legacy named-pipe compatibility and isolated x86 COM, mode and real-engine IPC tests. Real 32-bit and other application acceptance remains pending. See docs/RC9-READINESS.md",
-              "current_system_upgrade_and_application_matrix":"NOT RUN; user installation and further real application verification required"}}
+              "0.1.0_system_upgrade":"2026-10-29: rc.9 to 0.1.0 real administrator upgrade passed; 74 installed file hashes matched; x64/x86 COM and registration passed; one new broker; old profile retired. User confirmed Codex Chinese and Ctrl+Space round trips. User then reported tray menu displacement; do not treat that menu as accepted.",
+              "current_system_upgrade_and_application_matrix":"0.1.1 tray placement and current-version broker handoff require final installed verification; no claim of universal application compatibility"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY "+VERSION+"\n"+commit+"\n",encoding="utf-8")
     (a.stage.parent/(a.stage.name+"-version.nsh")).write_text(

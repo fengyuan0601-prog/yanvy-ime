@@ -8,7 +8,7 @@
 
 ## 当前阶段
 
-正在完成 **0.1.0 发布验证**。当前源码版本为 `0.1.0`，发布包将完成最终安装验证后提供。项目已有真实 librime 输入核心、原生 Windows TSF、候选窗和安装器。
+正在完成 **0.1.1 发布验证**。0.1.0 已在本机完成真实升级，用户确认 Codex 中中文输入和 Ctrl+空格双向切换正常；0.1.1 修复随后发现的托盘菜单定位问题，发布包将完成该项验证后提供。项目已有真实 librime 输入核心、原生 Windows TSF、候选窗和安装器。
 
 Windows 首发范围为 Windows 11 x64 桌面系统，支持五笔86、全拼、小鹤双拼、自然码双拼和微软双拼，随包提供 x64/x86 TSF 组件。词库位置可选择；系统程序使用受保护目录，设置和缓存单独保存。升级先安装新版，再安全清理旧文件。本轮已修复快捷键、安装权限边界与失败回滚问题，实际安装和应用验收仍在继续，不能把隔离测试当作所有软件兼容的证明。安装包未签名，尚无 Android 或 iPhone 安装包。详见 [本轮审计与验证记录](docs/RELEASE-AUDIT-2026-10-28.md)。`core/build/ime-core` 是开发诊断程序。
 
@@ -22,7 +22,7 @@ Windows 首发范围为 Windows 11 x64 桌面系统，支持五笔86、全拼、
 | Windows 系统输入法 / 安装包 | 受保护系统组件与可选词库位置分离；13 项隔离安装事务、5 项真实引擎/模拟注册安装检查通过，真实安装与应用验收继续中 |
 | Android / iOS 原生键盘 | 后续阶段 |
 | 九宫格、成熟整句纠错、本地自定义短语 | 后续阶段，不属于当前核心已验证功能 |
-| GitHub 官方仓库 | 已公开 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)，正在准备 0.1.0 发布 |
+| GitHub 官方仓库 | 已公开 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)，正在准备 0.1.1 发布 |
 
 远程源码以官方仓库 `main` 的实际内容为准；CI 结果以 [GitHub Actions](https://github.com/fengyuan0601-prog/yanvy-ime/actions) 的实际运行记录为准。上面的42项来自原始 Linux 报告；GitHub Linux/Windows CI 的通过记录和实际边界另见发布与 Windows 接续记录。
 

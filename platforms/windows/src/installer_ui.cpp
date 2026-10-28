@@ -6,6 +6,7 @@
 #include "machine_store.hpp"
 #include "installer_diagnostics.hpp"
 #include "user_cleanup.hpp"
+#include "broker_upgrade.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
@@ -43,12 +44,14 @@ struct View {
   HINSTANCE instance{};HWND window{},primary{},secondary{},browse{},notes{},settings{},progress{},heading{},status_control{},path_control{};
   HWND schema_box{};uint32_t schema=1;
   UINT dpi=96;int page=0;bool uninstall=false,preview=false;DWORD result=0;HANDLE worker=nullptr;
-  enum class Stage { none, prepare_data, machine, enable_user, stop_legacy, apply_schema, cleanup_data };
+  enum class Stage { none, prepare_data, machine, enable_user, stop_legacy, apply_schema, verify_broker, cleanup_data };
   Stage stage=Stage::none;bool data_prepared=false,configuration_failed=false,show_diagnostics=false;
   DWORD machine_result=0;
   DWORD cleanup_result=0;bool cleanup_done=false;
   InstallerPhase diagnostic_phase=InstallerPhase::unknown;
   std::filesystem::path previous_install,previous_data,uninstall_data;
+  UpgradeBrokerSnapshot upgrade_broker;
+  bool broker_checked=false;
   HFONT body{},caption_font{},headline{},brand{},strong{};HICON icon{};ULONG_PTR graphics{};
   HBRUSH white=CreateSolidBrush(RGB(248,250,252)),card=CreateSolidBrush(RGB(253,254,255));
   std::filesystem::path target=DefaultInstall();std::wstring status;
@@ -163,10 +166,11 @@ struct View {
     if(preview){status=L"界面预览不执行安装，也不更改系统输入法。";Refresh();return;}
     // A retry can select a different path. Cleanup ownership never transfers
     // from a previous failed attempt to the newly selected directory.
-    configuration_failed=false;data_prepared=false;result=0;machine_result=0;cleanup_result=0;cleanup_done=false;diagnostic_phase=InstallerPhase::unknown;
+    configuration_failed=false;data_prepared=false;result=0;machine_result=0;cleanup_result=0;cleanup_done=false;broker_checked=false;diagnostic_phase=InstallerPhase::unknown;
     if(!ValidInstallPath(target)){result=10;status=L"位置无效：请选择本地普通文件夹。";page=3;Refresh();return;}
     if(!uninstall){std::error_code error;if(std::filesystem::exists(target,error)&&(!std::filesystem::is_directory(target,error)||!std::filesystem::is_empty(target,error))){result=10;status=L"此目录已有文件。请更改位置，选择新的空目录。";page=3;Refresh();return;}}
     else uninstall_data=InstalledDataRoot(Runtime());
+    if(!uninstall){const HRESULT captured=CaptureUpgradeBroker(previous_install,Runtime(),upgrade_broker);if(FAILED(captured)){Fail(DWORD(captured));return;}}
     status=uninstall?L"正在卸载系统组件…":L"正在准备所选位置的离线词库…";
     const bool started=uninstall?StartMachine():Spawn(Self(),L"--worker-prepare-data \""+target.wstring()+L"\"",Stage::prepare_data);
     if(!started)Fail(GetLastError());
@@ -216,11 +220,15 @@ struct View {
         else if(!configuration_failed)diagnostic_phase=InstallerPhase::cleanup;
       }
     }
+    if(!uninstall&&runtime_trusted&&!broker_checked){
+      broker_checked=true;StartBroker(Runtime());status=L"正在确认新版引擎已启动…";
+      if(UserStep(L"YANVY-Setup.exe",L"--verify-current-broker",Stage::verify_broker))return;
+      configuration_failed=true;result=GetLastError();
+    }
     status=machine_result==3010?L"旧版被占用的文件将稍后清理；不会自动重启。":machine_result==33?L"新版已安装；旧版本已按安全范围处理，个人设置和未知文件保留。":L"任务已完成。";
     if(configuration_failed)status=uninstall?L"程序已卸载，部分用户文件或启动项未能清理。请查看诊断。":L"程序已安装，但当前用户配置未完成。请查看诊断；可打开设置检查方案。";
     else if(cleanup_result){status=L"新版已安装，部分旧文件正在使用或不可写，已保留。可查看诊断。";result=cleanup_result;}
     else result=machine_result;
-    if(!uninstall&&runtime_trusted)StartBroker(Runtime());
     Refresh();
   }
   void Complete(DWORD code){
@@ -240,8 +248,13 @@ struct View {
       if(UserStep(L"YANVY-Setup.exe",L"--enable-user",Stage::enable_user))return;
       configuration_failed=true;result=GetLastError();Finish();return;
     }
-    if(code!=0){configuration_failed=true;result=code;}
-    if(finished==Stage::enable_user){status=L"正在切换到新版引擎…";if(UserStep(L"YANVY-Setup.exe",L"--stop-previous-brokers",Stage::stop_legacy))return;configuration_failed=true;result=GetLastError();}
+    if(code!=0){configuration_failed=true;result=code;diagnostic_phase=finished==Stage::stop_legacy?InstallerPhase::cleanup:InstallerPhase::unknown;}
+    if(finished==Stage::enable_user){
+      status=L"正在切换到新版引擎…";std::wstring stop=L"--stop-previous-brokers";
+      if(upgrade_broker.pid)stop+=L" "+std::to_wstring(upgrade_broker.pid)+L" "+std::to_wstring(upgrade_broker.created)+L" \""+previous_install.wstring()+L"\"";
+      if(UserStep(L"YANVY-Setup.exe",stop,Stage::stop_legacy))return;
+      configuration_failed=true;result=GetLastError();
+    }
     if(finished==Stage::enable_user||finished==Stage::stop_legacy){status=L"正在保存所选输入方案…";if(UserStep(L"YANVY-Settings.exe",L"--apply-schema "+std::to_wstring(schema),Stage::apply_schema))return;configuration_failed=true;result=GetLastError();}
     Finish();
   }

@@ -1,4 +1,6 @@
-YANVY 0.1.0-dev source snapshot
+YANVY historical initial-import record (not the current build revision)
+Current build revision: use git HEAD, packaged BUILD-INFO.json, or SOURCE-MANIFEST.json.
+The remaining lines document the original 0.1.0-dev import only.
 Local commit: 1c7d72470fa71a33e362bfeb7608fc18eacd4093
 Target repository: https://github.com/fengyuan0601-prog/yanvy-ime
 Initial source import published as fccdbc27633a1f110b4475caee3aacba915cf91c on main.
