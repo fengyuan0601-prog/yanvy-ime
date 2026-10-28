@@ -11,8 +11,8 @@ Unicode true
 !include "${STAGE}-version.nsh"
 Name "言舟 · YANVY ${YANVY_VERSION}"
 OutFile "${OUTPUT}"
-InstallDir "E:\Codex\Programs\YANVY\${YANVY_VERSION}"
-; The public native bootstrap requests UAC, sets E: temp, then launches this
+InstallDir "$LOCALAPPDATA\Programs\YANVY\${YANVY_VERSION}"
+; The public native bootstrap requests UAC, sets a protected temp, then launches this
 ; internal payload with its elevated token and inherited environment.
 RequestExecutionLevel user
 SetCompressor /SOLID lzma

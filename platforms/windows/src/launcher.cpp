@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// Unelevated public UI; explicit runas worker; protected E: extraction.
+// Unelevated public UI; explicit runas worker; protected extraction.
 #include "installer_ui.hpp"
 #include <shellapi.h>
 #include <sddl.h>
@@ -17,7 +17,13 @@ int Worker(HINSTANCE instance,bool uninstall,const std::filesystem::path& target
   DWORD lock_error=GetLastError();
   if(!lock||lock_error==ERROR_ALREADY_EXISTS){if(lock)CloseHandle(lock);return ERROR_BUSY;}
   struct Release { HANDLE handle;~Release(){CloseHandle(handle);} } release{lock};
-  const std::filesystem::path temporary=L"E:\\Codex\\Temp";
+  bool prefer_e=GetDriveTypeW(L"E:\\")==DRIVE_FIXED;std::filesystem::path fallback;
+  if(!prefer_e){
+    wchar_t buffer[32768]{};DWORD length=GetTempPathW(DWORD(std::size(buffer)),buffer);
+    if(!length||length>=std::size(buffer))return 40;
+    fallback=std::filesystem::path(buffer);
+  }
+  auto temporary=yanvy::SelectSetupTemp(prefer_e,fallback);
   if(!yanvy::ValidInstallPath(temporary/L"guard"))return 10;
   std::error_code error;std::filesystem::create_directories(temporary,error);
   if(error||!SetEnvironmentVariableW(L"TEMP",temporary.c_str())||!SetEnvironmentVariableW(L"TMP",temporary.c_str())||
@@ -62,6 +68,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
     const std::wstring option=count>1?args[1]:L"";
     if(option==L"--render-preview"&&count==5)result=yanvy::RenderInstaller(instance,args[2],UINT(_wtoi(args[3])),_wtoi(args[4]));
     else if(option==L"--check-path"&&count==3)result=yanvy::ValidInstallPath(args[2])?0:10;
+    else if(option==L"--check-fallback"&&count==2){
+      auto home=std::filesystem::path(L"C:\\Users\\Example\\AppData\\Local");
+      auto temp=home/L"Temp";
+      result=(yanvy::SelectDefaultInstall(false,home)==home/L"Programs"/L"YANVY"/yanvy::kVersion&&
+          yanvy::SelectSetupTemp(false,temp)==temp&&yanvy::SelectSetupTemp(true,temp)==std::filesystem::path(L"E:\\Codex\\Temp"))?0:1;
+    }
 #ifndef YANVY_PREVIEW_ONLY
     else if(option==L"--worker-install"&&count==4&&wcslen(args[3])==1&&args[3][0]>=L'0'&&args[3][0]<L'0'+ime::kSchemaCount)result=Worker(instance,false,args[2],uint32_t(args[3][0]-L'0'));
     else if(option==L"--worker-uninstall"&&count==3)result=Worker(instance,true,args[2],1);

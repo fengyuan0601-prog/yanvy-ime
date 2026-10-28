@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #include "common.hpp"
 #include "ime_core.hpp"
+#include "tray_icon.hpp"
 #include <algorithm>
 #include <memory>
 #include <shellapi.h>
@@ -48,6 +49,7 @@ int Serve() {
   try {
     const auto root = yanvy::ModuleDir();
     ime::Engine engine((root / L"data").u8string(), (root / L"profile").u8string());
+    yanvy::TrayIcon tray;
     GUID owner{};
     std::string schema = "wubi86";
     while (WaitForSingleObject(stop, 0) != WAIT_OBJECT_0) {
@@ -129,5 +131,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
       return engine.TypeAscii("wqvb").candidates.empty() ? 6 : 0;
     } catch (...) { return 5; }
   }
+  if (option == L"--tray-smoke") { yanvy::TrayIcon tray; return tray.Registered()&&tray.RemoveForTest()?0:7; }
   return option == L"--serve" ? Serve() : 1;
 }

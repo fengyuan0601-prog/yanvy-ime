@@ -11,8 +11,8 @@ def main():
     binary=parser.parse_args().binary.resolve()
     cases=[(r'E:\Codex\Programs\YANVY\0.1.0-rc.1',True),
            ('E:\\言舟 测试\\YANVY\\0.1.0-rc.1',True),
-           ('E:\\',False),('C:\\Programs\\YANVY',False),
-           ('D:\\YANVY',False),('..\\YANVY',False),
+           ('E:\\',False),('C:\\Users\\Example\\YANVY',True),
+           ('D:\\YANVY',True),('..\\YANVY',False),
            ('\\\\server\\share\\YANVY',False),('\\\\?\\E:\\YANVY',False),
            ('E:\\safe\\..\\other',False),('E:\\safe\\.\\other',False),
            ('E:\\safe\\trailing.',False),('E:\\safe\\trailing ',False),
@@ -21,6 +21,8 @@ def main():
     for value,expected in cases:
         result=subprocess.run([str(binary),'--check-path',value],timeout=10)
         assert (result.returncode==0)==expected,repr(value)
+    assert subprocess.run([str(binary),'--check-fallback'],timeout=10).returncode==0
+    print('no-E default and temporary-directory fallback: PASS (synthetic paths)')
     print(f'{len(cases)} installer path boundary checks PASS; no registration or installation performed')
 
 if __name__=='__main__':main()

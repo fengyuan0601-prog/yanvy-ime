@@ -6,6 +6,7 @@
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
+#include <shlobj.h>
 #include <shellapi.h>
 #include <wrl/client.h>
 
@@ -13,7 +14,9 @@ namespace yanvy {
 bool ValidInstallPath(const std::filesystem::path& path){
   const auto text=path.wstring();
   if(text.size()<6||text.size()>200||text.find_first_of(L"\"\r\n\t/*?<>|")!=std::wstring::npos)return false;
-  if((text[0]!=L'E'&&text[0]!=L'e')||text[1]!=L':'||text[2]!=L'\\')return false;
+  if(!((text[0]>=L'A'&&text[0]<=L'Z')||(text[0]>=L'a'&&text[0]<=L'z'))||text[1]!=L':'||text[2]!=L'\\')return false;
+  auto drive=path.root_path().wstring();UINT drive_type=GetDriveTypeW(drive.c_str());
+  if(drive_type==DRIVE_REMOTE||drive_type==DRIVE_CDROM)return false;
   if(text.find(L':',2)!=std::wstring::npos||text.back()==L' '||text.back()==L'.')return false;
   if(path.lexically_normal()!=path||!path.has_filename())return false;
   for(auto part:path.relative_path())if(part==L".."||part==L"."||part.wstring().back()==L' '||part.wstring().back()==L'.')return false;
@@ -25,6 +28,26 @@ bool ValidInstallPath(const std::filesystem::path& path){
   return true;
 }
 namespace {
+// The engine and settings live below the installation directory and must be
+// writable by the invoking user after the elevated installer has exited.
+bool WritableParent(std::filesystem::path path){
+  path=path.parent_path();
+  while(!path.empty()&&GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES){auto parent=path.parent_path();if(parent==path)return false;path=parent;}
+  if(path.empty())return false;
+  GUID id{};wchar_t name[64]{};if(FAILED(CoCreateGuid(&id))||!StringFromGUID2(id,name,64))return false;
+  auto probe=path/(std::wstring(L"YANVY-write-test-")+name+L".tmp");
+  HANDLE file=CreateFileW(probe.c_str(),GENERIC_WRITE|DELETE,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+      nullptr,CREATE_NEW,FILE_ATTRIBUTE_TEMPORARY|FILE_FLAG_DELETE_ON_CLOSE,nullptr);
+  if(file==INVALID_HANDLE_VALUE)return false;
+  CloseHandle(file);return true;
+}
+std::filesystem::path DefaultInstall(){
+  auto preferred=std::filesystem::path(L"E:\\Codex\\Programs");
+  if(GetDriveTypeW(L"E:\\")==DRIVE_FIXED&&std::filesystem::is_directory(preferred))return SelectDefaultInstall(true,{});
+  PWSTR local=nullptr;std::filesystem::path result;
+  if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local))){result=SelectDefaultInstall(false,std::filesystem::path(local));CoTaskMemFree(local);}
+  return result;
+}
 constexpr int primary_id=101,secondary_id=102,browse_id=103,notes_id=104,settings_id=105;
 struct View {
   HINSTANCE instance{};HWND window{},primary{},secondary{},browse{},notes{},settings{},progress{},heading{},status_control{},path_control{};
@@ -32,7 +55,7 @@ struct View {
   UINT dpi=96;int page=0;bool uninstall=false,preview=false;DWORD result=0;HANDLE worker=nullptr;
   HFONT body{},caption_font{},headline{},brand{},strong{};HICON icon{};ULONG_PTR graphics{};
   HBRUSH white=CreateSolidBrush(RGB(248,250,252)),card=CreateSolidBrush(RGB(253,254,255));
-  std::filesystem::path target=kDefaultInstall;std::wstring status;
+  std::filesystem::path target=DefaultInstall();std::wstring status;
   View(){Gdiplus::GdiplusStartupInput input;input.SuppressExternalCodecs=TRUE;Gdiplus::GdiplusStartup(&graphics,&input,nullptr);}
   ~View(){ClearFonts();DeleteObject(white);DeleteObject(card);if(worker)CloseHandle(worker);if(graphics)Gdiplus::GdiplusShutdown(graphics);}
   int D(int n)const{return MulDiv(n,int(dpi),96);}
@@ -114,15 +137,16 @@ struct View {
   void Browse(){
     Microsoft::WRL::ComPtr<IFileOpenDialog> dialog;
     if(FAILED(CoCreateInstance(CLSID_FileOpenDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&dialog))))return;
-    dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择 E 盘中的安装父目录");
-    Microsoft::WRL::ComPtr<IShellItem> start;if(SUCCEEDED(SHCreateItemFromParsingName(L"E:\\Codex\\Programs",nullptr,IID_PPV_ARGS(&start))))dialog->SetFolder(start.Get());
+    dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择安装父目录，将自动创建言舟版本文件夹");
+    auto parent=target.parent_path().parent_path();Microsoft::WRL::ComPtr<IShellItem> start;if(SUCCEEDED(SHCreateItemFromParsingName(parent.c_str(),nullptr,IID_PPV_ARGS(&start))))dialog->SetFolder(start.Get());
     if(SUCCEEDED(dialog->Show(window))){Microsoft::WRL::ComPtr<IShellItem> item;PWSTR value=nullptr;
       if(SUCCEEDED(dialog->GetResult(&item))&&SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&value))){auto selected=std::filesystem::path(value)/L"YANVY"/kVersion;CoTaskMemFree(value);
-        if(ValidInstallPath(selected)){target=selected;status=L"程序和安装临时文件均保存在 E 盘。";}else status=L"请选择 E 盘中的普通文件夹，不使用链接或系统盘。";Refresh();}}
+        if(ValidInstallPath(selected)){target=selected;status=L"将创建言舟版本目录；请选择当前用户可写的本地文件夹。";}else status=L"请选择本地普通文件夹，不使用网络路径或链接。";Refresh();}}
   }
   void Start(){
     if(preview){status=L"界面预览不执行安装，也不更改系统输入法。";Refresh();return;}
-    if(!ValidInstallPath(target)){status=L"安装位置无效：请选择 E 盘中的普通文件夹。";page=3;Refresh();return;}
+    if(!ValidInstallPath(target)){status=L"安装位置无效：请选择本地普通文件夹。";page=3;Refresh();return;}
+    if(!uninstall&&!WritableParent(target)){status=L"当前用户无法写入此位置。请选择个人文件夹或其他可写目录。";page=3;Refresh();return;}
     if(!uninstall){std::error_code error;if(std::filesystem::exists(target,error)&&(!std::filesystem::is_directory(target,error)||!std::filesystem::is_empty(target,error))){status=L"此目录已有文件。请更改位置，选择新的空目录。";page=3;Refresh();return;}}
     wchar_t exe[32768]{};GetModuleFileNameW(nullptr,exe,32768);
     std::wstring arguments=std::wstring(uninstall?L"--worker-uninstall ":L"--worker-install ")+L"\""+target.wstring()+L"\"";
@@ -168,7 +192,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(message==WM_TIMER&&v->worker&&WaitForSingleObject(v->worker,0)==WAIT_OBJECT_0){KillTimer(window,1);GetExitCodeProcess(v->worker,&v->result);CloseHandle(v->worker);v->worker=nullptr;
     v->page=(v->result==0||v->result==3010)?2:3;
     v->status=v->page==2?(v->result==3010?L"部分文件将在重启后清理；不会自动重启。":L"任务已完成。"):
-      v->result==10?L"目录已有文件，或不是有效的 E 盘安装位置。":v->result==20?L"词库或文件校验失败，请重新获取安装包。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
+      v->result==10?L"目录已有文件，或不是有效的本地安装位置。":v->result==20?L"词库或文件校验失败，请重新获取安装包。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
       v->result==31?L"安装失败，回退未完成。新旧程序文件已保留，请保留目录并报告错误类别 31。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);v->Refresh();return 0;}
   if(message==WM_COMMAND){if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){
     case primary_id:if(v->page==2)DestroyWindow(window);else if(v->page!=1)v->Start();return 0;

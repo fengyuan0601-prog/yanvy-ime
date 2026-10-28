@@ -67,7 +67,7 @@ inline std::wstring UserSid() {
 inline std::wstring ObjectName(const wchar_t* prefix) {
   DWORD session = 0;
   ProcessIdToSessionId(GetCurrentProcessId(), &session);
-  return std::wstring(prefix) + L"YANVY-v2-" + UserSid() + L"-" + std::to_wstring(session);
+  return std::wstring(prefix) + L"YANVY-v3-" + UserSid() + L"-" + std::to_wstring(session);
 }
 inline std::wstring PipeName() { return ObjectName(L"\\\\.\\pipe\\"); }
 // Bound both the connection and each IO operation. A failed engine never
