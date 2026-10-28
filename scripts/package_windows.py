@@ -63,6 +63,7 @@ def main():
               "dev2_ui":"Native settings save/reopen/defaults and 18/32 font preview checked; painter rendered at 96/144/192 DPI",
               "rc1":"65 core PASS/1 network-trace SKIP; 35 isolated v2 broker PASS; new NSIS transaction/path and preference fixtures PASS; native UI displayed",
               "rc2":"65 core PASS/1 network-trace SKIP; 35 broker PASS; 18 ordered-edit checks; 6 isolated NSIS scenarios; 4 registration-removal failure injections and retries; 48 bounded candidate layouts; 15 paths; preferences and COM smoke PASS. See docs/RC2-READINESS.md for scope",
+              "rc3":"caret geometry failure/clipping checks and candidate layout fixture; installed rc2 files verified and rc2 core rechecked; real rc3 installation and application tests pending. See docs/RC3-READINESS.md",
               "current_system_upgrade_and_application_matrix":"NOT RUN; user installation and further real application verification required"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY "+VERSION+"\n"+commit+"\n",encoding="utf-8")

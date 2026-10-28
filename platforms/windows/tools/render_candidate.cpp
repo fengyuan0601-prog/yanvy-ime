@@ -2,11 +2,22 @@
 // Developer-only render of the actual native painter with synthetic text.
 // This is not an IME input or application-compatibility test.
 #include "candidate_view.hpp"
+#include "caret_geometry.hpp"
 #include <cwchar>
 #include <iostream>
 
 // Exercise the actual painter geometry without opening a window or input session.
 static int CheckLayout(){
+  RECT previous{20,20,21,40},next{300,200,301,220},empty{};
+  yanvy::UpdateCaretExtent(previous,E_FAIL,next,FALSE);
+  if(!EqualRect(&previous,&empty))return 4;
+  yanvy::UpdateCaretExtent(previous,S_OK,next,TRUE);
+  if(!EqualRect(&previous,&empty))return 5;
+  yanvy::UpdateCaretExtent(previous,S_OK,next,FALSE);
+  if(!EqualRect(&previous,&next))return 6;
+  yanvy::UpdateCaretExtent(previous,S_OK,empty,FALSE);
+  if(!EqualRect(&previous,&empty))return 7;
+  std::cout<<"caret geometry: failed, clipped and empty extents do not reuse an old position\n";
   HDC dc=GetDC(nullptr);
   for(SIZE work:std::initializer_list<SIZE>{{640,480},{1366,728}})
   for(UINT dpi:{96u,144u,192u,288u})for(int font:{12,18,32})for(uint32_t count:{5u,10u}){

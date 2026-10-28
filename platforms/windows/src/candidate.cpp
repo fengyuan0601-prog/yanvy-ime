@@ -6,7 +6,7 @@
 namespace yanvy {
 CandidateWindow::~CandidateWindow(){
   if(window_)DestroyWindow(window_);
-  if(module_)UnregisterClassW(L"YANVY.Candidates.rc2",module_);
+  if(module_)UnregisterClassW(L"YANVY.Candidates.rc3",module_);
 }
 void CandidateWindow::Hide(){
   hover_=-1;
@@ -19,7 +19,7 @@ void CandidateWindow::Update(HINSTANCE module,const std::filesystem::path& root,
   if(!transient&&!state.input[0]&&!state.preedit[0]){Hide();return;}
   if(!window_){
     module_=module;
-    WNDCLASSW wc{};wc.hInstance=module;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Candidates.rc2";
+    WNDCLASSW wc{};wc.hInstance=module;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Candidates.rc3";
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.style=CS_DROPSHADOW;RegisterClassW(&wc);
     auto old=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     window_=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,wc.lpszClassName,L"言舟候选",

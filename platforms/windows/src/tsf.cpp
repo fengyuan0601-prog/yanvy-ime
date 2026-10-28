@@ -5,6 +5,7 @@
 #include "common.hpp"
 #include "ids.hpp"
 #include "candidate.hpp"
+#include "caret_geometry.hpp"
 #include "edit_session.hpp"
 #include "msctf_compat.hpp"
 #include <wrl/client.h>
@@ -270,6 +271,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   void BindContext(ITfContext* context) {
     if (context_.Get() == context) return;
+    caret_ = {};
     ComPtr<ITfSource> source;
     if (context_ && SUCCEEDED(context_->QueryInterface(IID_PPV_ARGS(&source)))) {
       if (edit_cookie_ != TF_INVALID_COOKIE) source->UnadviseSink(edit_cookie_);
@@ -342,6 +344,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   void Position(TfEditCookie ec) {
     if (!context_) return;
+    caret_ = {};
     ComPtr<ITfContextView> view;
     ComPtr<ITfRange> range;
     if (FAILED(context_->GetActiveView(&view))) { candidates_.Hide(); return; }
@@ -353,7 +356,8 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (range) {
       range->Collapse(ec,TF_ANCHOR_START);
       RECT caret{}; BOOL clipped=FALSE;
-      if (SUCCEEDED(view->GetTextExt(ec,range.Get(),&caret,&clipped))) caret_ = caret;
+      HRESULT result=view->GetTextExt(ec,range.Get(),&caret,&clipped);
+      yanvy::UpdateCaretExtent(caret_,result,caret,clipped);
     }
     Show(false);
   }
