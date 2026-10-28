@@ -93,7 +93,7 @@ def main():
         network_trace = None
         if sys.platform.startswith("linux") and shutil.which("strace"):
             run(["schema pinyin_simp", "keys nihao", "key space"], trace=True)
-            trace = (base / "network.trace").read_text()
+            trace = (base / "network.trace").read_text(encoding="utf-8")
             # glibc may try the local nscd UNIX socket during process setup.
             # That is local IPC, not IP traffic; do not mislabel it as a leak
             # or claim that absolutely no socket-related syscall occurred.
@@ -119,9 +119,9 @@ def main():
 
         def replace_file(profile, relative, old, new):
             target = profile / relative
-            text = target.read_text()
+            text = target.read_text(encoding="utf-8")
             assert old in text, relative
-            target.write_text(text.replace(old, new, 1))
+            target.write_text(text.replace(old, new, 1), encoding="utf-8")
 
         attack("learning_patch", lambda p: replace_file(p, "pinyin_simp.custom.yaml", "enable_user_dict: false", "enable_user_dict: true"), immutable=True)
         for schema in ("double_pinyin_flypy","double_pinyin","double_pinyin_mspy"):
@@ -129,16 +129,16 @@ def main():
             attack(schema+"_compiled_learning",lambda p,s=schema:replace_file(p,"build/"+s+".schema.yaml","enable_user_dict: false","enable_user_dict: true"),immutable=True)
 
         alias_patch = "\n  engine/translators: [punct_translator, reverse_lookup_translator, table_translator@remember]\n  remember: {dictionary: wubi86, enable_user_dict: true, enable_encoder: true, encode_commit_history: true}\n"
-        attack("named_translator_source", lambda p: (p / "wubi86.custom.yaml").write_text((p / "wubi86.custom.yaml").read_text() + alias_patch), immutable=True)
+        attack("named_translator_source", lambda p: (p / "wubi86.custom.yaml").write_text((p / "wubi86.custom.yaml").read_text(encoding="utf-8") + alias_patch, encoding="utf-8"), immutable=True)
 
         def extra_schema(profile):
-            text = (shared / "pinyin_simp.schema.yaml").read_text().replace("schema_id: pinyin_simp", "schema_id: extra")
-            (profile / "extra.schema.yaml").write_text(text)
+            text = (shared / "pinyin_simp.schema.yaml").read_text(encoding="utf-8").replace("schema_id: pinyin_simp", "schema_id: extra")
+            (profile / "extra.schema.yaml").write_text(text, encoding="utf-8")
             replace_file(profile, "default.custom.yaml", "schema_list:", "schema_list:\n    - schema: extra")
         attack("unapproved_initial_schema", extra_schema, immutable=True)
 
         def add_script(profile):
-            (profile / "rime.lua").write_text("-- Unauthorized executable configuration, must never be evaluated.\n")
+            (profile / "rime.lua").write_text("-- Unauthorized executable configuration, must never be evaluated.\n", encoding="utf-8")
         attack("unexpected_lua_file", add_script, immutable=True)
 
         # These attacks leave all source/patch hashes correct. They verify the
@@ -146,7 +146,7 @@ def main():
         def cached_alias(profile):
             replace_file(profile, "build/wubi86.schema.yaml", "    - table_translator\n", "    - table_translator@remember\n")
             file = profile / "build/wubi86.schema.yaml"
-            file.write_text(file.read_text() + "\nremember:\n  dictionary: wubi86\n  enable_user_dict: true\n  enable_encoder: true\n  encode_commit_history: true\n")
+            file.write_text(file.read_text(encoding="utf-8") + "\nremember:\n  dictionary: wubi86\n  enable_user_dict: true\n  enable_encoder: true\n  encode_commit_history: true\n", encoding="utf-8")
         attack("named_translator_compiled", cached_alias)
         attack("compiled_initial_schema_list", lambda p: replace_file(p, "build/default.yaml", "  - schema: wubi86", "  - schema: extra"))
         attack("compiled_lua_filter", lambda p: replace_file(p, "build/wubi86.schema.yaml", "engine:\n", "engine:\n  filters: [lua_filter@record_input]\n"))
@@ -169,7 +169,7 @@ def main():
                   "privacy_limit": "These checks cover the exercised build and scenarios, not a security certification or protection against the OS/host application."}
         if args.report:
             args.report.parent.mkdir(parents=True, exist_ok=True)
-            args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+            args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(report, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
