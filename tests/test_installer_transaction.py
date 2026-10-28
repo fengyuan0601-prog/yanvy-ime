@@ -22,12 +22,16 @@ def main():
     parser.add_argument('--fixture-binary',type=Path,required=True)
     parser.add_argument('--makensis',type=Path,required=True)
     parser.add_argument('--temp-dir',type=Path,required=True)
+    parser.add_argument('--scenario',action='append',help='Run only the named scenario; may be repeated.')
     a=parser.parse_args()
     base=a.temp_dir.resolve()/('yanvy-transaction-'+uuid.uuid4().hex)
     assert base.is_relative_to(a.temp_dir.resolve()) and not base.exists()
     base.mkdir(parents=True)
-    for scenario in ('check-failure','check-crash','registration-failure','rollback-failure',
-                     'rollback-unregister-failure','success','unicode-success','unsafe-previous','uninstall-failure'):
+    scenarios=('check-failure','check-crash','registration-failure','rollback-failure',
+               'rollback-unregister-failure','success','unicode-success','unsafe-previous','uninstall-failure')
+    if a.scenario and not set(a.scenario).issubset(scenarios):parser.error('Unknown scenario')
+    for scenario in scenarios:
+        if a.scenario and scenario not in a.scenario:continue
         root=base/('选择位置 测试' if scenario=='unicode-success' else 'standard')/scenario
         stage=root/'stage';old=root/'old';new=root/'new';stage.mkdir(parents=True);old.mkdir()
         key_path='Software\\YANVY-Installer-Fixture\\'+uuid.uuid4().hex
@@ -67,7 +71,7 @@ def main():
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(new)
         result=subprocess.run(install_command,env=env,timeout=30)
-        expected=26 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
+        expected=0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
         if scenario in ('check-failure','check-crash'):

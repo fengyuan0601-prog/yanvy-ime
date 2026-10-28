@@ -161,6 +161,14 @@ Section "言舟 Windows TSF 开发测试"
       StrCpy $FailureCode 29
     ${ElseIf} $0 == 10
       StrCpy $FailureCode 32
+    ${Else}
+      ; Preserve ordinary unexpected exit codes too, without colliding with
+      ; the installer's own small result categories.
+      ${If} $0 <= 65535
+        IntOp $FailureCode $0 | 0xA1260000
+      ${Else}
+        StrCpy $FailureCode $0
+      ${EndIf}
     ${EndIf}
     IfSilent +2
     MessageBox MB_OK|MB_ICONSTOP "固定词库或隐私策略校验失败，未启用言舟。请保留此错误类别并报告。"
