@@ -72,7 +72,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
       auto home=std::filesystem::path(L"C:\\Users\\Example\\AppData\\Local");
       auto temp=home/L"Temp";
       result=(yanvy::SelectDefaultInstall(false,home)==home/L"Programs"/L"YANVY"/yanvy::kVersion&&
-          yanvy::SelectSetupTemp(false,temp)==temp&&yanvy::SelectSetupTemp(true,temp)==std::filesystem::path(L"E:\\Codex\\Temp"))?0:1;
+          yanvy::SelectSetupTemp(false,temp)==temp&&yanvy::SelectSetupTemp(true,temp)==std::filesystem::path(L"E:\\Codex\\Temp")&&
+          yanvy::ResolveInstallPath(std::filesystem::path(L"D:\\YANVY")/yanvy::kVersion)==std::filesystem::path(L"D:\\YANVY")/yanvy::kVersion&&
+          yanvy::ResolveInstallPath(L"D:\\YANVY\\0.1.0-rc.4")==std::filesystem::path(L"D:\\YANVY")/yanvy::kVersion&&
+          yanvy::ResolveInstallPath(L"D:\\YANVY")==std::filesystem::path(L"D:\\YANVY")/yanvy::kVersion&&
+          yanvy::ResolveInstallPath(L"D:\\apps")==std::filesystem::path(L"D:\\apps\\YANVY")/yanvy::kVersion)?0:1;
     }
 #ifndef YANVY_PREVIEW_ONLY
     else if(option==L"--worker-install"&&count==4&&wcslen(args[3])==1&&args[3][0]>=L'0'&&args[3][0]<L'0'+ime::kSchemaCount)result=Worker(instance,false,args[2],uint32_t(args[3][0]-L'0'));

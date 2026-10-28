@@ -124,14 +124,39 @@ Section "言舟 Windows TSF 开发测试"
     MessageBox MB_OK|MB_ICONINFORMATION "这个开发版本已经安装。请先卸载，或选择新的空目录；旧配置不会被静默覆盖。"
     Abort
   install_files:
+  StrCpy $FailureCode 21
   ClearErrors
   SetOutPath "$INSTDIR"
   File /r "${STAGE}\*.*"
   IfErrors rollback
+  ; Detect missing engine DLL/dependencies before the server loader starts.
+  StrCpy $FailureCode 23
+  ClearErrors
+  ExecWait '"$INSTDIR\YANVY-Setup.exe" --check-dependencies' $0
+  IfErrors rollback
+  ${If} $0 != 0
+    Goto rollback
+  ${EndIf}
   ; Warm the fixed data using synthetic input before system registration.
+  StrCpy $FailureCode 22
+  ClearErrors
   ExecWait '"$INSTDIR\YANVY-Server.exe" --check' $0
   IfErrors rollback
   ${If} $0 != 0
+    StrCpy $FailureCode 26
+    ${If} $0 == 5
+      StrCpy $FailureCode 24
+    ${ElseIf} $0 == 6
+      StrCpy $FailureCode 25
+    ${ElseIf} $0 == 7
+      StrCpy $FailureCode 27
+    ${ElseIf} $0 == 8
+      StrCpy $FailureCode 28
+    ${ElseIf} $0 == 9
+      StrCpy $FailureCode 29
+    ${ElseIf} $0 == 10
+      StrCpy $FailureCode 32
+    ${EndIf}
     IfSilent +2
     MessageBox MB_OK|MB_ICONSTOP "固定词库或隐私策略校验失败，未启用言舟。请保留此错误类别并报告。"
     Goto rollback

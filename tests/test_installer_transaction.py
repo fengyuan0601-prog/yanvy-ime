@@ -63,7 +63,7 @@ def main():
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(new)
         result=subprocess.run(install_command,env=env,timeout=30)
-        expected=20 if scenario=='check-failure' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 0
+        expected=26 if scenario=='check-failure' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
         if scenario=='check-failure':

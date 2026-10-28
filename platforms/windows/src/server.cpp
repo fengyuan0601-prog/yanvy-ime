@@ -129,6 +129,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
       auto root = yanvy::ModuleDir();
       ime::Engine engine((root / L"data").u8string(), (root / L"profile").u8string());
       return engine.TypeAscii("wqvb").candidates.empty() ? 6 : 0;
+    } catch (const std::filesystem::filesystem_error&) { return 7; }
+    catch (const std::exception& error) {
+      // Return categories only: never write paths or input to diagnostics.
+      const std::string reason=error.what();
+      if(reason=="Refusing reparse point in protected data path."||reason=="Refusing symlink in protected data path.")return 8;
+      if(reason=="Refusing profile: trusted source or no-learning patch was modified."||
+         reason=="Required trusted data file is missing."||reason=="Refusing unexpected shared data, configuration, or script."||
+         reason=="Refusing unexpected user schema, script, or saved dictionary.")return 9;
+      if(reason=="Missing default configuration."||reason=="Required schema did not deploy."||
+         reason=="Refusing schema: approved components or no-learning policy differ."||
+         reason=="Refusing default configuration: approved schema list or startup policy differ.")return 10;
+      return 5;
     } catch (...) { return 5; }
   }
   if (option == L"--tray-smoke") { yanvy::TrayIcon tray; return tray.Registered()&&tray.RemoveForTest()?0:7; }

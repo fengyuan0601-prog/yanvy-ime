@@ -140,7 +140,7 @@ struct View {
     dialog->SetOptions(FOS_PICKFOLDERS|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|FOS_DONTADDTORECENT);dialog->SetTitle(L"选择安装父目录，将自动创建言舟版本文件夹");
     auto parent=target.parent_path().parent_path();Microsoft::WRL::ComPtr<IShellItem> start;if(SUCCEEDED(SHCreateItemFromParsingName(parent.c_str(),nullptr,IID_PPV_ARGS(&start))))dialog->SetFolder(start.Get());
     if(SUCCEEDED(dialog->Show(window))){Microsoft::WRL::ComPtr<IShellItem> item;PWSTR value=nullptr;
-      if(SUCCEEDED(dialog->GetResult(&item))&&SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&value))){auto selected=std::filesystem::path(value)/L"YANVY"/kVersion;CoTaskMemFree(value);
+      if(SUCCEEDED(dialog->GetResult(&item))&&SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&value))){auto selected=ResolveInstallPath(std::filesystem::path(value));CoTaskMemFree(value);
         if(ValidInstallPath(selected)){target=selected;status=L"将创建言舟版本目录；请选择当前用户可写的本地文件夹。";}else status=L"请选择本地普通文件夹，不使用网络路径或链接。";Refresh();}}
   }
   void Start(){
@@ -192,7 +192,12 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(message==WM_TIMER&&v->worker&&WaitForSingleObject(v->worker,0)==WAIT_OBJECT_0){KillTimer(window,1);GetExitCodeProcess(v->worker,&v->result);CloseHandle(v->worker);v->worker=nullptr;
     v->page=(v->result==0||v->result==3010)?2:3;
     v->status=v->page==2?(v->result==3010?L"部分文件将在重启后清理；不会自动重启。":L"任务已完成。"):
-      v->result==10?L"目录已有文件，或不是有效的本地安装位置。":v->result==20?L"词库或文件校验失败，请重新获取安装包。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
+      v->result==10?L"目录已有文件，或不是有效的本地安装位置。":v->result==20?L"安装文件处理失败（20），请检查磁盘空间和权限。":
+      v->result==21?L"安装文件解压失败（21），请检查磁盘空间和权限。":v->result==22?L"无法启动词库检查程序（22），请检查安全软件和系统权限。":
+      v->result==23?L"引擎组件或系统依赖无法加载（23），请检查安全软件并反馈此代码。":v->result==24?L"词库初始化或校验失败（24），请反馈此代码。":v->result==25?L"词库没有返回预期候选（25），请反馈此代码。":
+      v->result==26?L"词库检查程序异常退出（26），请检查系统组件和安全软件。":v->result==27?L"无法访问词库目录（27），请检查位置和权限。":
+      v->result==28?L"安装路径包含链接或重解析点（28），请选择普通本地目录。":v->result==29?L"词库文件不完整或校验不匹配（29），请重新获取安装包。":
+      v->result==32?L"词库部署或配置校验失败（32），请反馈此代码。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
       v->result==31?L"安装失败，回退未完成。新旧程序文件已保留，请保留目录并报告错误类别 31。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);v->Refresh();return 0;}
   if(message==WM_COMMAND){if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){
     case primary_id:if(v->page==2)DestroyWindow(window);else if(v->page!=1)v->Start();return 0;

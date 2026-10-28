@@ -9,6 +9,12 @@ inline std::filesystem::path SelectDefaultInstall(bool preferred,const std::file
 inline std::filesystem::path SelectSetupTemp(bool preferred,const std::filesystem::path& fallback){
   return preferred?std::filesystem::path(L"E:\\Codex\\Temp"):fallback;
 }
+inline std::filesystem::path ResolveInstallPath(const std::filesystem::path& selected){
+  const auto name=selected.filename().wstring();
+  if(name.rfind(L"0.1.0-",0)==0&&_wcsicmp(selected.parent_path().filename().c_str(),L"YANVY")==0)return selected.parent_path()/kVersion;
+  if(_wcsicmp(selected.filename().c_str(),L"YANVY")==0)return selected/kVersion;
+  return selected/L"YANVY"/kVersion;
+}
 bool ValidInstallPath(const std::filesystem::path& path);
 int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show);
 int RenderInstaller(HINSTANCE instance,const std::filesystem::path& output,UINT dpi,int page);

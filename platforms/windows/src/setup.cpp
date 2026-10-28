@@ -136,6 +136,15 @@ int wmain(int argc, wchar_t** argv) {
   HRESULT hr = E_INVALIDARG;
   if (option == L"--register") hr = Register(machine);
   else if (option == L"--unregister") hr = Unregister(machine);
+  else if (option == L"--check-dependencies") {
+    // Load the packaged engine explicitly before starting the server. Missing
+    // dependencies are reported without launching a child stuck in a loader UI.
+    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOOPENFILEERRORBOX);
+    const auto dll=yanvy::ModuleDir()/L"rime.dll";
+    HMODULE library=LoadLibraryExW(dll.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    hr=library&&GetProcAddress(library,"rime_get_api")?S_OK:E_FAIL;
+    if(library)FreeLibrary(library);
+  }
   else if (option == L"--status") {
     ComPtr<ITfInputProcessorProfiles> profiles;
     hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&profiles));
