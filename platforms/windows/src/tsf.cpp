@@ -7,6 +7,7 @@
 #include "candidate.hpp"
 #include "caret_geometry.hpp"
 #include "edit_session.hpp"
+#include "input_mode.hpp"
 #include "msctf_compat.hpp"
 #include <wrl/client.h>
 #include <atomic>
@@ -66,6 +67,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (SUCCEEDED(hr)) hr = source->AdviseSink(IID_ITfThreadMgrEventSink, static_cast<ITfThreadMgrEventSink*>(this), &thread_cookie_);
     if (SUCCEEDED(hr)) source->AdviseSink(IID_ITfThreadFocusSink, static_cast<ITfThreadFocusSink*>(this), &focus_cookie_);
     if (FAILED(hr)) { Deactivate(); return hr; }
+    AttachInputMode();
     ComPtr<ITfDocumentMgr> document;
     if (SUCCEEDED(manager_->GetFocus(&document))) Bind(document.Get());
     yanvy::StartBroker(yanvy::ModuleDir(module));
@@ -73,6 +75,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   }
   HRESULT STDMETHODCALLTYPE Deactivate() override {
     if (!manager_) return S_OK;
+    if (mode_) { mode_->Detach(); mode_.Reset(); }
     Cancel(); Bind(nullptr);
     ComPtr<ITfSource> source;
     if (SUCCEEDED(manager_->QueryInterface(IID_PPV_ARGS(&source)))) {
@@ -114,7 +117,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
       RefreshPreference();
       if (context_.Get() != context) { Cancel(); BindContext(context); }
       if (key == VK_SPACE && Down(VK_CONTROL)) {
-        Cancel(); ascii_ = !ascii_; Show(true); *eaten = TRUE; return S_OK;
+        ToggleInputMode(); *eaten = TRUE; return S_OK;
       }
       if (key == VK_F12 && Down(VK_CONTROL) && Down(VK_SHIFT)) {
         Cancel();if(schema_){last_pinyin_schema_=schema_;schema_=0;}else schema_=last_pinyin_schema_;
@@ -144,7 +147,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     if (!eaten) return E_POINTER;
     *eaten = FALSE;
     if (key == yanvy::kToggleEnglish && manager_ && !Disabled(context)) {
-      Cancel();ascii_=!ascii_;Show(true);*eaten=TRUE;
+      ToggleInputMode();*eaten=TRUE;
     }
     return S_OK;
   }
@@ -180,7 +183,30 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     else if (code == TF_LC_CHANGE && composition_ && context == context_.Get()) Position();
     return S_OK;
   }
+#ifdef YANVY_MODE_FIXTURE
+  void BeginModeFixture(ITfThreadMgr* manager, TfClientId client) {
+    manager_ = manager; client_ = client; AttachInputMode();
+  }
+  void EndModeFixture() {
+    if (mode_) { mode_->Detach(); mode_.Reset(); }
+    manager_.Reset();
+  }
+#endif
  private:
+  void AttachInputMode() {
+    mode_.Attach(new(std::nothrow) yanvy::InputModeCompartment);
+    if (mode_ && SUCCEEDED(mode_->Attach(manager_.Get(),client_,[this](bool open) {
+      if (ascii_ != !open) { Cancel(); ascii_ = !open; Show(true); }
+    }))) {
+      bool open = true; if (mode_->Read(open)) ascii_ = !open;
+    } else mode_.Reset();
+  }
+  void ToggleInputMode() {
+    const bool next_ascii = !ascii_;
+    Cancel(); ascii_ = next_ascii;
+    if (mode_) mode_->SetOpen(!next_ascii);
+    Show(true);
+  }
   static bool Down(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
   bool Disabled(ITfContext* context) {
     if (!context) return true;
@@ -248,7 +274,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
     auto preference=yanvy::ReadSchemaPreference(preferences);
     auto revision=yanvy::ReadInputRevision(preferences);
     last_pinyin_schema_=yanvy::ReadPinyinSchemaPreference(preferences);
-    if(preference!=preferred_schema_||revision!=preference_revision_){Cancel();schema_=preferred_schema_=preference;preference_revision_=std::move(revision);ascii_=false;if(schema_)last_pinyin_schema_=schema_;}
+    if(preference!=preferred_schema_||revision!=preference_revision_){Cancel();schema_=preferred_schema_=preference;preference_revision_=std::move(revision);if(schema_)last_pinyin_schema_=schema_;}
   }
   bool EnsureFocus() {
     if (active_) return true;
@@ -408,6 +434,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
   ComPtr<ITfThreadMgr> manager_;
   ComPtr<ITfContext> context_;
   ComPtr<ITfComposition> composition_;
+  ComPtr<yanvy::InputModeCompartment> mode_;
   GUID owner_{};
   uint64_t generation_ = 0;
   uint64_t snapshot_revision_ = 0;

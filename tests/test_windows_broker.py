@@ -52,7 +52,7 @@ def main():
     assert a.ConvertSidToStringSidW(c.cast(data, c.POINTER(c.c_void_p))[0], c.byref(sid))
     session = w.DWORD()
     assert k.ProcessIdToSessionId(os.getpid(), c.byref(session))
-    pipe = rf"\\.\pipe\YANVY-v5-{sid.value}-{session.value}"
+    pipe = rf"\\.\pipe\YANVY-v6-{sid.value}-{session.value}"
     k.LocalFree(sid)
     k.CloseHandle(token)
     checks = []

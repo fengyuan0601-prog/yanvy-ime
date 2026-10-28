@@ -145,7 +145,7 @@ int wmain(int argc, wchar_t** argv) {
     if (sid.empty() || !ProcessIdToSessionId(GetCurrentProcessId(), &session)) hr = E_FAIL;
     else {
       hr = S_OK;
-      for (const auto version : {L"v3", L"v4"}) {
+      for (const auto version : {L"v3", L"v4", L"v5"}) {
         const auto name = std::wstring(L"Local\\Stop-YANVY-") + version + L"-" + sid + L"-" + std::to_wstring(session);
         HANDLE event = OpenEventW(EVENT_MODIFY_STATE, FALSE, name.c_str());
         if (event) { if (!SetEvent(event)) hr = HRESULT_FROM_WIN32(GetLastError()); CloseHandle(event); }

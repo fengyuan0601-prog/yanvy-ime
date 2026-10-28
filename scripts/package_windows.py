@@ -68,6 +68,7 @@ def main():
               "rc5":"real librime and isolated NSIS checks cover valid data, corrupted data and missing rime DLL; path-deduplication and failure categorization. User-reported target computer installation not yet verified. See docs/RC5-READINESS.md",
               "rc6":"16 path checks; 35 broker checks with a simulated protected install directory; isolated user preference and tamper checks; 8 NSIS synthetic upgrade/rollback and 4 real-engine NSIS cases. Actual UAC installation and migration remain unverified. See docs/RC6-READINESS.md",
               "rc7":"Notification-icon version negotiation and event decoding, synthetic upgrade transaction, 35 isolated broker checks, and path checks. Actual taskbar interaction and system upgrade remain unverified. See docs/RC7-READINESS.md",
+              "rc8":"Private real TSF compartment mode round trips; Windows real application hotkey interaction remains unverified. See docs/RC8-READINESS.md",
               "current_system_upgrade_and_application_matrix":"NOT RUN; user installation and further real application verification required"}}
     (a.stage/"BUILD-INFO.json").write_text(json.dumps(info,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (a.stage/"YANVY-INSTALL-MARKER.txt").write_text("YANVY "+VERSION+"\n"+commit+"\n",encoding="utf-8")
