@@ -196,6 +196,10 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
       v->result==28?L"安装路径包含链接或重解析点（28），请选择普通本地目录。":v->result==29?L"词库文件不完整或校验不匹配（29），请重新获取安装包。":
       v->result==32?L"词库部署或配置校验失败（32），请反馈此代码。":v->result==30?(v->uninstall?L"Windows 未完成注销，程序文件已保留。请关闭使用言舟的应用后重试。":L"系统注册失败；本次安装已回退。"):
       v->result==31?L"安装失败，回退未完成。新旧程序文件已保留，请保留目录并报告错误类别 31。":v->result==ERROR_BUSY?L"已有安装或卸载任务正在运行，请稍后再试。":L"操作未完成。错误类别："+std::to_wstring(v->result);
+    if(v->result>=0x80000000u){
+      wchar_t code[11]{};swprintf(code,11,L"0x%08lX",static_cast<unsigned long>(v->result));
+      v->status=std::wstring(L"安装异常，错误码 ")+code+L"，请反馈。";
+    }
     if(!scheme_ok)v->status+=L" 输入方案未保存，请打开设置重试。";
     v->Refresh();return 0;}
   if(message==WM_COMMAND){if(LOWORD(wp)==111&&HIWORD(wp)==EN_CHANGE){if(v->path_control){wchar_t path[32768]{};GetWindowTextW(v->path_control,path,32768);v->target=std::filesystem::path(path);}return 0;}if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){

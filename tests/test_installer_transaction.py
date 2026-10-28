@@ -26,7 +26,7 @@ def main():
     base=a.temp_dir.resolve()/('yanvy-transaction-'+uuid.uuid4().hex)
     assert base.is_relative_to(a.temp_dir.resolve()) and not base.exists()
     base.mkdir(parents=True)
-    for scenario in ('check-failure','registration-failure','rollback-failure',
+    for scenario in ('check-failure','check-crash','registration-failure','rollback-failure',
                      'rollback-unregister-failure','success','unicode-success','unsafe-previous','uninstall-failure'):
         root=base/('选择位置 测试' if scenario=='unicode-success' else 'standard')/scenario
         stage=root/'stage';old=root/'old';new=root/'new';stage.mkdir(parents=True);old.mkdir()
@@ -41,6 +41,7 @@ def main():
         (old/'keep.txt').write_text('unrelated old file must survive')
         if scenario=='unsafe-previous':(old/'YANVY-INSTALL-MARKER.txt').unlink()
         if scenario=='check-failure':(stage/'check-result.txt').write_text('1')
+        if scenario=='check-crash':(stage/'check-result.txt').write_text('-1073741795')  # 0xC000001D, simulated exception status
         if scenario in ('registration-failure','rollback-failure','rollback-unregister-failure'):
             (stage/'register-result.txt').write_text('1')
         if scenario=='rollback-failure':(old/'register-result.txt').write_text('1')
@@ -66,10 +67,10 @@ def main():
         # including when the selected directory contains spaces.
         install_command=subprocess.list2cmdline([str(installer)])+' /S /D='+str(new)
         result=subprocess.run(install_command,env=env,timeout=30)
-        expected=26 if scenario=='check-failure' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
+        expected=26 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario=='registration-failure' else 31 if scenario.startswith('rollback-') else 33 if scenario=='unsafe-previous' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
-        if scenario=='check-failure':
+        if scenario in ('check-failure','check-crash'):
             assert not old_trace and read_key('InstallLocation')==str(old)
             assert (old/'YANVY-Setup.exe').exists() and (old/'Uninstall.exe').exists()
             assert not (new/'YANVY-Setup.exe').exists()

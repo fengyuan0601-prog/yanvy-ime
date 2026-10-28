@@ -145,7 +145,11 @@ Section "言舟 Windows TSF 开发测试"
   IfErrors rollback
   ${If} $0 != 0
     StrCpy $FailureCode 26
-    ${If} $0 == 5
+    ; Keep Windows exception statuses intact so the outer UI can show the
+    ; real reason. This contains no paths, input, or memory contents.
+    ${If} $0 < 0
+      StrCpy $FailureCode $0
+    ${ElseIf} $0 == 5
       StrCpy $FailureCode 24
     ${ElseIf} $0 == 6
       StrCpy $FailureCode 25
