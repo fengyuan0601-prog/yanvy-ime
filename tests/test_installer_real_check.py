@@ -56,7 +56,9 @@ def main():
         assert PRODUCT_KEY not in source and ' HKLM ' not in source and '$LOCALAPPDATA' not in source
         script=root/'test.nsi';script.write_text(source,encoding='utf-8-sig')
         installer=root/'test.exe'
-        subprocess.run([str(a.makensis),'/V2',f'/DSTAGE={stage}',f'/DOUTPUT={installer}',str(script)],check=True,timeout=45)
+        # The dual-architecture payload takes longer to compress on busy
+        # machines. This bound applies only to the isolated test build.
+        subprocess.run([str(a.makensis),'/V2',f'/DSTAGE={stage}',f'/DOUTPUT={installer}',str(script)],check=True,timeout=180)
         env=dict(os.environ,YANVY_SETUP_TEMP_READY='1',YANVY_PREVIOUS_CAN_CLEAN='1',TEMP=str(a.temp_dir.resolve()),TMP=str(a.temp_dir.resolve()))
         try:
             result=subprocess.run(subprocess.list2cmdline([str(installer)])+' /S /D='+str(target),env=env,timeout=90)
