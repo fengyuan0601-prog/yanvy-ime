@@ -33,7 +33,7 @@ def main():
                'rollback-unregister-failure','legacy-registration-failure','legacy-rollback-failure',
                'success','unicode-success','unsafe-previous','retire-failure','uninstall-failure','wrong-runtime-target','metadata-failure',
                'repair-success','repair-relocate','repair-register-failure','repair-metadata-failure',
-               'repair-locked-dll','repair-missing-uninstaller','repair-without-verification')
+               'repair-locked-dll','repair-missing-uninstaller','repair-without-verification','settings-entries-warning')
     if a.scenario and not set(a.scenario).issubset(scenarios):parser.error('Unknown scenario')
     for scenario in scenarios:
         if a.scenario and scenario not in a.scenario:continue
@@ -59,6 +59,7 @@ def main():
         if scenario=='check-failure':(stage/'check-result.txt').write_text('1')
         if scenario=='x86-check-failure':(stage/'x86-check-result.txt').write_text('1')
         if scenario=='check-crash':(stage/'check-result.txt').write_text('-1073741795')  # 0xC000001D, simulated exception status
+        if scenario=='settings-entries-warning':(stage/'settings-entries-result.txt').write_text('1')
         if scenario in ('registration-failure','rollback-failure','rollback-unregister-failure',
                         'legacy-registration-failure','legacy-rollback-failure'):
             (stage/'register-result.txt').write_text('1')
@@ -127,7 +128,7 @@ def main():
         try:result=subprocess.run(install_command,env=env,timeout=90)
         finally:
             if locked is not None:api.CloseHandle(locked)
-        expected=11 if scenario=='repair-without-verification' else 23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario in ('registration-failure','legacy-registration-failure','metadata-failure') else 31 if scenario.startswith('rollback-') or scenario in ('legacy-rollback-failure','repair-register-failure','repair-metadata-failure') else 33 if scenario in ('unsafe-previous','retire-failure') else 41 if scenario=='wrong-runtime-target' else 0
+        expected=11 if scenario=='repair-without-verification' else 23 if scenario=='x86-check-failure' else 0xA1260001 if scenario=='check-failure' else 0xC000001D if scenario=='check-crash' else 30 if scenario in ('registration-failure','legacy-registration-failure','metadata-failure') else 31 if scenario.startswith('rollback-') or scenario in ('legacy-rollback-failure','repair-register-failure','repair-metadata-failure') else 33 if scenario in ('unsafe-previous','retire-failure','settings-entries-warning') else 41 if scenario=='wrong-runtime-target' else 0
         assert result.returncode==expected,(scenario,result.returncode)
         old_trace=(old/'fixture-trace.txt').read_text() if (old/'fixture-trace.txt').exists() else ''
         assert not old_trace,(scenario,'old executable was invoked')

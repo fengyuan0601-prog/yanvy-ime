@@ -155,7 +155,9 @@ int Serve(const std::filesystem::path& test_profile = {}) {
             q.magic == yanvy::kMagic && q.version == yanvy::kProtocol && q.schema < ime::kSchemaCount) {
           try {
             const bool owns = IsEqualGUID(q.owner, owner);
-            if (q.op == yanvy::Op::Focus) {
+            if (q.op == yanvy::Op::OpenSettings) {
+              r = yanvy::SettingsLaunchResponse(q,root);
+            } else if (q.op == yanvy::Op::Focus) {
               if (!owns) engine.Clear();
               owner = q.owner;
               const std::string wanted = ime::kSchemaIds[q.schema];

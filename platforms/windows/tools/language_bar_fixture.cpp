@@ -9,6 +9,7 @@ namespace {
 unsigned checks=0;
 void Check(bool value,const char* label){++checks;if(!value)throw std::runtime_error(label);}
 std::wstring ReadText(ITfLangBarItemButton* item){BSTR value=nullptr;Check(SUCCEEDED(item->GetText(&value))&&value,"GetText");std::wstring text(value,SysStringLen(value));SysFreeString(value);return text;}
+std::wstring ReadTooltip(ITfLangBarItemButton* item){BSTR value=nullptr;Check(SUCCEEDED(item->GetTooltipString(&value))&&value,"GetTooltipString");std::wstring text(value,SysStringLen(value));SysFreeString(value);return text;}
 struct Sink final:ITfLangBarItemSink {
   ULONG refs=1;unsigned updates=0;DWORD flags=0;std::function<void()> during_update;
   ComPtr<ITfLangBarItem> held;std::function<void()> during_destroy;
@@ -73,9 +74,9 @@ std::vector<unsigned char> IconMask(HICON icon,int size){
 }
 int wmain(){
   try{
-    std::atomic<long> objects{0};unsigned toggles=0,settings=0;
+    std::atomic<long> objects{0};unsigned toggles=0,settings=0;HRESULT settings_result=S_OK;
     ComPtr<yanvy::ModeLanguageBar> item;
-    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[&]{++toggles;item->SetAscii(true);},[&]{++settings;},&objects));
+    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[&]{++toggles;item->SetAscii(true);},[&]{++settings;return settings_result;},&objects));
     Check(objects==1,"item pins module");
     TF_LANGBARITEMINFO info{};Check(item->GetInfo(&info)==S_OK&&info.guidItem==yanvy::kNativeInputModeItem&&
         (info.dwStyle&TF_LBI_STYLE_TEXTCOLORICON)&&(info.dwStyle&TF_LBI_STYLE_BTN_BUTTON),"native item identity and theme style");
@@ -99,6 +100,16 @@ int wmain(){
     item->SetAscii(false);Check(ReadText(item.Get())==L"中"&&sink->updates==2,"external mode update");
     Check(AreDpiAwarenessContextsEqual(dpi,GetThreadDpiAwarenessContext()),"host DPI unchanged");
     BSTR tooltip=nullptr;Check(item->GetTooltipString(&tooltip)==S_OK&&wcsstr(tooltip,L"右键打开设置"),"discoverable settings tooltip");SysFreeString(tooltip);
+    const auto normal_tooltip=ReadTooltip(item.Get());
+    settings_result=E_ACCESSDENIED;
+    Check(item->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==E_ACCESSDENIED&&settings==2&&toggles==1,"right reports original settings failure without toggling");
+    Check(ReadTooltip(item.Get()).find(L"0x80070005")!=std::wstring::npos&&sink->flags==TF_LBI_TOOLTIP,"settings failure exposes only error code in updated tooltip");
+    settings_result=HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+    Check(item->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==settings_result&&ReadTooltip(item.Get()).find(L"0x80070002")!=std::wstring::npos,"retry replaces previous failure code");
+    settings_result=S_FALSE;
+    Check(item->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==S_FALSE&&ReadTooltip(item.Get())==normal_tooltip&&sink->flags==TF_LBI_TOOLTIP,"successful HRESULT is preserved and retry clears error");
+    settings_result=S_OK;
+    Check(item->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==S_OK&&ReadTooltip(item.Get())==normal_tooltip&&settings==5,"successful retry remains available");
     DWORD status=0;item->Show(FALSE);Check(item->GetStatus(&status)==S_OK&&(status&TF_LBI_STATUS_HIDDEN),"hidden status");item->Show(TRUE);
     sink->during_update=[&]{Check(source->UnadviseSink(cookie)==S_OK,"reentrant unadvise");};item->SetAscii(true);
     Check(sink->refs==1,"sink released after reentrant notification");sink->during_update={};
@@ -123,22 +134,32 @@ int wmain(){
       Check(cycle_released&&cycle_release_pinned,"disconnect breaks sink/item cycle while pinned");
       Check(manager->unadvise_result==S_OK,"RemoveItem can unadvise disconnected sink");
     }
-    Check(item->OnClick(TF_LBI_CLK_LEFT,{0,0},nullptr)==S_FALSE&&item->OnClick(TF_LBI_CLK_RIGHT,{-1,-1},nullptr)==S_FALSE,"shutdown disables callbacks");
+    const auto stopped_toggles=toggles,stopped_settings=settings;
+    Check(item->OnClick(TF_LBI_CLK_LEFT,{0,0},nullptr)==S_FALSE&&item->OnClick(TF_LBI_CLK_RIGHT,{-1,-1},nullptr)==S_FALSE&&toggles==stopped_toggles&&settings==stopped_settings,"shutdown disables callbacks");
     item.Reset();Check(objects==1,"shell-held item still pins module after owner exits");
     ComPtr<ITfLangBarItemButton> retained;Check(manager->held->QueryInterface(IID_ITfLangBarItemButton,reinterpret_cast<void**>(retained.GetAddressOf()))==S_OK,"retained item QI");
     Check(ReadText(retained.Get())==L"英"&&retained->GetIcon(&first)==S_OK,"retained item still safe");DestroyIcon(first);retained.Reset();
     manager->held.Reset();Check(objects==0,"last shell release unpins module");
     bool destructor_released=false,destructor_pinned=false;
-    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[]{},[]{},&objects));
+    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[]{},[]{return S_OK;},&objects));
     ComPtr<Sink> destructor_sink;destructor_sink.Attach(new Sink);
     destructor_sink->during_destroy=[&]{destructor_released=true;destructor_pinned=objects==1;};
     Check(item->AdviseSink(IID_ITfLangBarItemSink,destructor_sink.Get(),&cookie)==S_OK,"advise destructor probe sink");
     destructor_sink.Reset();item.Reset();
     Check(destructor_released&&destructor_pinned&&objects==0,"sink Release precedes module unpin");
-    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[&]{++toggles;},[&]{++settings;},&objects));
+    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[&]{++toggles;},[&]{++settings;return S_OK;},&objects));
     manager->add_result=E_FAIL;yanvy::LanguageBarBinding failed;
     Check(failed.Attach(manager.Get(),item.Get())==E_FAIL&&item->OnClick(TF_LBI_CLK_LEFT,{0,0},nullptr)==S_FALSE,"AddItem failure disconnects callbacks");
     item.Reset();Check(objects==0,"failed registration has no module leak");
+    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[]{},[]()->HRESULT{throw std::runtime_error("synthetic settings failure");},&objects));
+    Check(item->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==E_FAIL&&ReadTooltip(item.Get()).find(L"0x80004005")!=std::wstring::npos,"settings exception becomes visible HRESULT");
+    item.Reset();Check(objects==0,"exception path releases item");
+    bool failure_notification_pinned=false;
+    item.Attach(new yanvy::ModeLanguageBar(GUID_NULL,false,[]{},[&]{item.Reset();return E_ACCESSDENIED;},&objects));
+    ComPtr<Sink> failure_sink;failure_sink.Attach(new Sink);
+    failure_sink->during_update=[&]{failure_notification_pinned=objects==1;};
+    Check(item->AdviseSink(IID_ITfLangBarItemSink,failure_sink.Get(),&cookie)==S_OK,"advise callback lifetime probe");
+    Check(item->OnClick(TF_LBI_CLK_RIGHT,{0,0},nullptr)==E_ACCESSDENIED&&failure_notification_pinned&&objects==0&&failure_sink->refs==1,"failing settings callback may release owner without unloading during notification");
     std::cout<<"Native mode item COM, actions, notifications, theme masks, DPI sizes and lifetime PASS ("<<checks<<" checks)\n";return 0;
   }catch(const std::exception& error){std::cerr<<"FAIL "<<error.what()<<"\n";return 1;}
 }

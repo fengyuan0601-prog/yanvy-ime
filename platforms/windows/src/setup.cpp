@@ -7,6 +7,7 @@
 #include "registration_flow.hpp"
 #include "machine_store.hpp"
 #include "broker_upgrade.hpp"
+#include "settings_compat.hpp"
 #include <wrl/client.h>
 #include <iostream>
 #include <algorithm>
@@ -239,6 +240,10 @@ int wmain(int argc, wchar_t** argv) {
     // Recheck protection here, and never undo existing entries on a failure.
     hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
     if(SUCCEEDED(hr))hr=Register(true,yanvy::ModuleDir(),yanvy::RegistrationMode::repair);
+  }
+  else if(option==L"--restore-settings-entries"&&machine&&argc==3){
+    hr=yanvy::ValidateMachineRuntime(yanvy::ModuleDir());
+    if(SUCCEEDED(hr))hr=yanvy::RestoreMissingSettingsEntries(yanvy::ModuleDir());
   }
   else if (option == L"--restore-registration" && machine && argc==4) {
     // Recovery runs this trusted helper, never a previous installation's exe.

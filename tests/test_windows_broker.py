@@ -120,6 +120,17 @@ def main():
     for key in "nihao":
         r = call(two, 2, ord(key), schema=1)
     check("real_pinyin_candidates", r.candidates[0].value == "你好")
+    before_settings = call(two, 4, schema=1)
+    settings = call(uuid.UUID(int=0), 5)
+    expected_settings = Response()
+    expected_settings.magic, expected_settings.version, expected_settings.ok = MAGIC, 2, 1
+    expected_settings.handled = 0x80004001  # E_NOTIMPL: general engine fixture cannot launch production UI.
+    check("settings_action_reply_has_no_input_snapshot", bytes(settings) == bytes(expected_settings))
+    check("settings_action_preserves_owner_and_real_engine_state", bytes(call(two, 4, schema=1)) == bytes(before_settings))
+    malformed_settings = call(one, 5, key=65)
+    expected_settings.handled = 0x80070057  # E_INVALIDARG; no arbitrary command/argument channel.
+    check("malformed_settings_action_is_rejected_without_state", bytes(malformed_settings) == bytes(expected_settings))
+    check("settings_error_preserves_existing_input_owner", bytes(call(two, 4, schema=1)) == bytes(before_settings))
     call(one, 3)
     check("old_focus_out_does_not_clear_new_focus", call(two, 4).input == "nihao")
     r = call(two, 2, 0xFF08)

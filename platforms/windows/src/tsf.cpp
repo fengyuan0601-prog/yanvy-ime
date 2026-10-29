@@ -280,7 +280,7 @@ class Service final : public ITfTextInputProcessorEx, public ITfKeyEventSink,
         ToggleInputMode();
       },[this]{
         ComPtr<ITfTextInputProcessorEx> keep_alive=this;
-        yanvy::OpenSettings(yanvy::ModuleDir(module));
+        return yanvy::OpenSettings(yanvy::ModuleDir(module));
       },&objects));
 #if !defined(YANVY_MODE_FIXTURE) && !defined(YANVY_TSF_HOST_FIXTURE)
       ComPtr<ITfLangBarItemMgr> items;

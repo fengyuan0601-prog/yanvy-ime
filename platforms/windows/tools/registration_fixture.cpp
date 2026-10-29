@@ -44,7 +44,7 @@ struct PreviousStates {
 int wmain() {
   try {
     constexpr size_t generations=std::size(yanvy::kPreviousTextServices);
-    Require(generations==3,"all three previous generations must be listed");
+    Require(generations==4,"all four previous generations must be listed");
     for(const auto& previous:yanvy::kPreviousTextServices){
       Require(*previous.service!=yanvy::kService&&*previous.profile!=yanvy::kProfile,"current identity is in retirement list");
       GUID parsed{};Require(SUCCEEDED(CLSIDFromString(previous.clsid,&parsed))&&parsed==*previous.service,"previous CLSID text differs from binary GUID");
@@ -84,7 +84,7 @@ int wmain() {
       Require(!state.profile && !state.categories && !state.com && !state.startup,"retry left owned entries");
       Require(yanvy::UnregisterTextService(state) == S_OK,"already-absent cleanup failed");
     }
-    std::cout << "registration cleanup: PASS (three previous identities, read-only rollback checks, failure preservation, retry and absent-entry cases; no system mutation)\n";
+    std::cout << "registration cleanup: PASS (four previous identities, read-only rollback checks, failure preservation, retry and absent-entry cases; no system mutation)\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

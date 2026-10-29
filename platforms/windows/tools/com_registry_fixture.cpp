@@ -4,7 +4,7 @@
 #include "../src/setup.cpp"
 
 int wmain(int argc,wchar_t** argv) {
-  if(argc>=4&&argc<=6&&std::wstring(argv[1])==L"--service-identities"){
+  if(argc>=4&&argc<=7&&std::wstring(argv[1])==L"--service-identities"){
     const HRESULT current=VerifyServiceIdentity(argv[2]);bool ok=SUCCEEDED(current);
     for(int index=3;index<argc;++index)ok=(VerifyServiceIdentity(argv[index])==CLASS_E_CLASSNOTAVAILABLE)&&ok;
     std::cout<<(ok?"current service accepted and legacy service refused before registry writes PASS\n":"service identity check FAIL\n");

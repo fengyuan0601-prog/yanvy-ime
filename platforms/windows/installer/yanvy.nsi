@@ -331,6 +331,16 @@ Section "言舟 Windows 输入法"
       StrCpy $CleanupWarning 1
     ${EndIf}
   ${EndIf}
+  ; Retained old TSF instances still call their original settings path. Only
+  ; after the new installation is committed and old cleanup has finished,
+  ; restore missing fixed entry points from this trusted settings executable.
+  ClearErrors
+  ExecWait '"$INSTDIR\YANVY-Setup.exe" --restore-settings-entries --machine' $0
+  ${If} ${Errors}
+    StrCpy $CleanupWarning 1
+  ${ElseIf} $0 != 0
+    StrCpy $CleanupWarning 1
+  ${EndIf}
   DetailPrint "安装完成。请从开始菜单启动言舟引擎，再在正常应用里选择言舟输入法。"
   DetailPrint "未更改系统默认输入法。请在系统输入法列表中选择言舟。"
   DetailPrint "升级后请使用本版本的卸载入口，不要运行旧版本文件夹里的卸载程序。"

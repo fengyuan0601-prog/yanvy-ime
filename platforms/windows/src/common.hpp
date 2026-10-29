@@ -189,16 +189,20 @@ inline bool Call(const Request& request, Response& response) {
   CloseHandle(pipe);
   return ok && response.magic == kMagic && response.version == kProtocol && response.ok;
 }
-inline bool StartUserProcess(const std::filesystem::path& exe,std::wstring command,const std::filesystem::path& root) {
+inline bool StartUserProcess(const std::filesystem::path& exe,std::wstring command,const std::filesystem::path& root,DWORD* launch_error=nullptr) {
+  const auto fail=[&](DWORD error){error=error?error:ERROR_GEN_FAILURE;if(launch_error)*launch_error=error;SetLastError(error);return false;};
+  if(launch_error)*launch_error=ERROR_SUCCESS;
   STARTUPINFOW si{sizeof(si)};
   PROCESS_INFORMATION pi{};
   HANDLE own=nullptr;TOKEN_ELEVATION elevation{};DWORD bytes=0;
-  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&own))return false;
+  if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&own))return fail(GetLastError());
   const bool known=GetTokenInformation(own,TokenElevation,&elevation,sizeof(elevation),&bytes)!=FALSE;
-  CloseHandle(own);if(!known)return false;
+  const DWORD token_error=GetLastError();CloseHandle(own);if(!known)return fail(token_error);
   BOOL launched=FALSE;
+  DWORD error=ERROR_ACCESS_DENIED;
   if(!elevation.TokenIsElevated){
     launched=CreateProcessW(exe.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,root.c_str(),&si,&pi);
+    if(!launched)error=GetLastError();
   }else{
     // An elevated host must not start a broker that writes to user data with
     // its administrator token. Use this same user's unelevated shell token.
@@ -213,12 +217,12 @@ inline bool StartUserProcess(const std::filesystem::path& exe,std::wstring comma
           ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(user.data())->User.Sid,&sid)&&sid&&UserSid()==sid&&
           GetTokenInformation(token,TokenElevation,&shell_elevation,sizeof(shell_elevation),&bytes)&&!shell_elevation.TokenIsElevated;
       if(sid)LocalFree(sid);
-      if(safe)launched=CreateProcessWithTokenW(token,0,exe.c_str(),command.data(),CREATE_NO_WINDOW,nullptr,root.c_str(),&si,&pi);
+      if(safe){launched=CreateProcessWithTokenW(token,0,exe.c_str(),command.data(),CREATE_NO_WINDOW,nullptr,root.c_str(),&si,&pi);if(!launched)error=GetLastError();}
       CloseHandle(token);
-    }
+    }else error=GetLastError();
     if(shell)CloseHandle(shell);
   }
-  if(launched){CloseHandle(pi.hThread);CloseHandle(pi.hProcess);}return launched!=FALSE;
+  if(launched){CloseHandle(pi.hThread);CloseHandle(pi.hProcess);return true;}return fail(error);
 }
 inline void StartBroker(const std::filesystem::path& root) {
 #ifdef YANVY_TSF_HOST_FIXTURE
@@ -228,12 +232,5 @@ inline void StartBroker(const std::filesystem::path& root) {
   StartUserProcess(exe,L"\""+exe.wstring()+L"\" --serve",root);
 #endif
 }
-inline void OpenSettings(const std::filesystem::path& root) {
-#ifdef YANVY_TSF_HOST_FIXTURE
-  (void)root; // A fixture must not launch production settings or user data.
-#else
-  auto executable=root/L"YANVY-Settings.exe";std::wstring command=L"\""+executable.wstring()+L"\"";
-  StartUserProcess(executable,command,root);
-#endif
 }
-}
+#include "settings_launch.hpp"

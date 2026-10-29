@@ -7,6 +7,7 @@
 #include <wrl/client.h>
 #include <atomic>
 #include <functional>
+#include <string>
 #include <utility>
 
 // Public SDK declarations missing from MinGW-w64's ctfutb.h. ABI verified
@@ -71,7 +72,7 @@ inline HICON CreateModeIcon(bool ascii,int width,int height) {
 class ModeLanguageBar final : public ITfLangBarItemButton,public ITfSource {
  public:
   ModeLanguageBar(REFCLSID service,bool ascii,std::function<void()> toggle,
-      std::function<void()> settings,std::atomic<long>* objects=nullptr)
+      std::function<HRESULT()> settings,std::atomic<long>* objects=nullptr)
       :module_pin_(objects),ascii_(ascii),toggle_(std::move(toggle)),settings_(std::move(settings)){
     info_.clsidService=service;info_.guidItem=kNativeInputModeItem;
     // Match Microsoft's SampleIME: GUID_LBI_INPUTMODE also advertises its
@@ -99,19 +100,40 @@ class ModeLanguageBar final : public ITfLangBarItemButton,public ITfSource {
     hidden_=!show;return Notify(TF_LBI_STATUS);
   }
   HRESULT STDMETHODCALLTYPE GetTooltipString(BSTR* out) override {
-    return Text(ascii_?L"言舟：英文 · 左键切换中英文，右键打开设置（Ctrl+空格）":
-        L"言舟：中文 · 左键切换中英文，右键打开设置（Ctrl+空格）",out);
+    if(!out)return E_POINTER;
+    *out=nullptr;
+    const auto* hint=ascii_?L"言舟：英文 · 左键切换中英文，右键打开设置（Ctrl+空格）":
+        L"言舟：中文 · 左键切换中英文，右键打开设置（Ctrl+空格）";
+    if(SUCCEEDED(settings_error_))return Text(hint,out);
+    try {
+      // Store only a numeric launch result, never paths or input contents.
+      constexpr wchar_t hex[]=L"0123456789ABCDEF";
+      wchar_t code[]=L"0x00000000";
+      const auto value=static_cast<unsigned long>(settings_error_);
+      for(unsigned i=0;i<8;++i)code[9-i]=hex[(value>>(i*4))&0xf];
+      const auto tooltip=std::wstring(hint)+L"\n设置未能打开（错误码 "+code+L"），请右键重试。";
+      return Text(tooltip.c_str(),out);
+    }catch(...){return E_OUTOFMEMORY;}
   }
   HRESULT STDMETHODCALLTYPE OnClick(TfLBIClick click,POINT,const RECT*) override {
     // No popup is positioned here: right-click opens the existing settings
     // window directly, without changing the host's DPI awareness or focus UI.
     Microsoft::WRL::ComPtr<ModeLanguageBar> keep_alive=this;
     if(disconnected_)return S_FALSE;
-    try {
-      auto action=click==TF_LBI_CLK_LEFT?toggle_:click==TF_LBI_CLK_RIGHT?settings_:std::function<void()>{};
-      if(!action)return S_FALSE;
-      action();return S_OK;
-    }catch(...){return E_FAIL;}
+    if(click==TF_LBI_CLK_RIGHT){
+      HRESULT result=E_FAIL;
+      try {
+        auto action=settings_;
+        if(!action)return S_FALSE;
+        result=action();
+      }catch(...){result=E_FAIL;}
+      const HRESULT error=FAILED(result)?result:S_OK;
+      if(settings_error_!=error){settings_error_=error;Notify(TF_LBI_TOOLTIP);}
+      return result;
+    }
+    if(click!=TF_LBI_CLK_LEFT)return S_FALSE;
+    try {auto action=toggle_;if(!action)return S_FALSE;action();return S_OK;}
+    catch(...){return E_FAIL;}
   }
   HRESULT STDMETHODCALLTYPE InitMenu(ITfMenu*) override {return E_NOTIMPL;}
   HRESULT STDMETHODCALLTYPE OnMenuSelect(UINT) override {return E_NOTIMPL;}
@@ -160,7 +182,9 @@ class ModeLanguageBar final : public ITfLangBarItemButton,public ITfSource {
   LONG refs_=1;
   TF_LANGBARITEMINFO info_{};
   bool ascii_=false,hidden_=false,disconnected_=false,sink_advised_=false;
-  std::function<void()> toggle_,settings_;
+  HRESULT settings_error_=S_OK;
+  std::function<void()> toggle_;
+  std::function<HRESULT()> settings_;
   Microsoft::WRL::ComPtr<ITfLangBarItemSink> sink_;
 };
 

@@ -25,6 +25,9 @@ int wmain(int argc,wchar_t** argv){
   if(option==L"--has-legacy-profile") {
     int result=1;std::ifstream(root/L"legacy-profile-result.txt")>>result;return result;
   }
+  if(option==L"--restore-settings-entries"){
+    int result=0;std::ifstream(root/L"settings-entries-result.txt")>>result;return result;
+  }
   if(option==L"--validate-machine-runtime"||option==L"--validate-previous-cleanup") {
     if(argc!=3)return 1;
     int result=0;std::ifstream(root/L"validate-result.txt")>>result;return result;
