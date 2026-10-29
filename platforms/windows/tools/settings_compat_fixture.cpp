@@ -57,10 +57,13 @@ int wmain(int argc,wchar_t** argv){
     std::filesystem::path target;
     Check(yanvy::SettingsForwardTarget(old,current,target)==S_OK&&target==current/L"YANVY-Settings.exe","old entry resolves to current fixed settings");
     Check(yanvy::SettingsForwardTarget(current,current,target)==S_FALSE&&target.empty(),"current settings does not forward to itself");
-    DWORD launch_error=0;const auto entry=old/L"YANVY-Settings.exe";
-    Check(yanvy::StartUserProcess(entry,L"\""+entry.wstring()+L"\"",old,&launch_error),"launch restored old fixed entry without a window");
-    for(unsigned attempt=0;attempt<100&&!std::filesystem::exists(current/L"forwarded-launch.txt");++attempt)Sleep(10);
-    Check(Read(current/L"forwarded-launch.txt")=="current settings reached"&&!std::filesystem::exists(old/L"forwarded-launch.txt"),"actual old entry forwards once to current executable");
+    yanvy::SettingsToken context;Check(SUCCEEDED(yanvy::CurrentSettingsToken(context)),"inspect actual launch test token");
+    if(yanvy::OrdinarySettingsToken(context)){
+      DWORD launch_error=0;const auto entry=old/L"YANVY-Settings.exe";
+      Check(yanvy::StartUserProcess(entry,L"\""+entry.wstring()+L"\"",old,&launch_error),"launch restored old fixed entry without a window");
+      for(unsigned attempt=0;attempt<100&&!std::filesystem::exists(current/L"forwarded-launch.txt");++attempt)Sleep(10);
+      Check(Read(current/L"forwarded-launch.txt")=="current settings reached"&&!std::filesystem::exists(old/L"forwarded-launch.txt"),"actual old entry forwards once to current executable");
+    }else std::cout<<"SKIP actual forwarding process launch: medium desktop token required (file restoration and rejection checks continue)\n";
     CloseHandle(retained);
     const auto unknown=yanvy::MachineRuntimeRoot(L"9.9.9");Check(SUCCEEDED(yanvy::PrepareMachineRuntime(unknown)),"create unlisted version fixture");
     Write(unknown/L"YANVY-TSF.dll","unlisted version");
