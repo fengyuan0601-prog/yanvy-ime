@@ -1,6 +1,6 @@
 # Windows 原生输入法
 
-版本：0.1.4 正式版，Windows 11 x64 桌面系统。[发行文件](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.4)已公开，安装包未签名。本机已完成 0.1.3 → 0.1.4 真实升级，74 项文件、系统注册、x64/x86 COM、新版后台及旧设置兼容入口核对通过；用户保持当前软件打开，确认右键设置正常。实际完成范围见 docs/RELEASE-AUDIT-2026-10-28.md。旧候选版记录作为历史证据保留。
+当前源码版本：0.1.5 界面改进版，Windows 11 x64 桌面系统。[发行状态与文件](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.5)。设置、安装与候选界面按统一标准更新；原生设置的实际操作及 18 组回归已完成，具体截图和未验证范围见 [界面记录](../../docs/UI-0.1.5.md)。安装包未签名。0.1.4 本机真实升级、74 项文件、系统注册、x64/x86 COM 和右键设置验收保留在 docs/RELEASE-AUDIT-2026-10-28.md，不等同于 0.1.5 已实装。
 
 此版本为 Windows x64 系统同时提供 x64 与 x86 TSF 组件；32 位 Office/WPS 和其他真实应用尚未实测，不承诺所有应用可用。
 

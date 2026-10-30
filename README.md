@@ -8,7 +8,7 @@
 
 ## 当前阶段
 
-**0.1.4 Windows 正式版已发布。** [下载安装包](https://github.com/fengyuan0601-prog/yanvy-ime/releases/download/v0.1.4/YANVY-0.1.4-windows-x64-setup.exe) · [发行说明、校验文件与对应源码](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.4)。本机已完成 0.1.3 → 0.1.4 真实升级，74 项安装文件哈希、系统注册、x64/x86 COM 和新版后台核对通过；用户保持当前软件打开，确认右键“中/英”能正常打开设置。升级后驻留旧组件的设置入口已修复。
+**0.1.5 Windows 界面改进版。** [下载安装包](https://github.com/fengyuan0601-prog/yanvy-ime/releases/download/v0.1.5/YANVY-0.1.5-windows-x64-setup.exe) · [发行状态、校验文件与对应源码](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.5)。本轮重做设置与安装界面，五种输入方案可直接选择，提供完整深浅主题和真实候选预览。已完成原生设置窗口的选择、保存、重开、恢复默认及 18 组限定回归；0.1.5 实际管理员升级与装后任务栏操作尚待验证。截图与范围见 [界面改进记录](docs/UI-0.1.5.md)。0.1.4 的真实升级和右键验收继续保留在历史发布审计中。
 
 Windows 首发范围为 Windows 11 x64 桌面系统，支持五笔86、全拼、小鹤双拼、自然码双拼和微软双拼，随包提供 x64/x86 TSF 组件。词库位置可选择；系统程序使用受保护目录，设置和缓存单独保存。升级先安装新版，再安全清理旧文件。本轮已修复快捷键、安装权限边界与失败回滚问题，实际安装和应用验收仍在继续，不能把隔离测试当作所有软件兼容的证明。安装包未签名，尚无 Android 或 iPhone 安装包。详见 [本轮审计与验证记录](docs/RELEASE-AUDIT-2026-10-28.md)。`core/build/ime-core` 是开发诊断程序。
 

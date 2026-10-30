@@ -22,10 +22,10 @@ inline bool IsDark(Appearance appearance) {
 struct Palette {
   COLORREF background,border,text,muted,accent,selection,selection_text,badge_text,hover,line,chip;
   static Palette Get(bool dark) {
-    if(dark) return {RGB(25,34,45),RGB(55,71,87),RGB(234,241,247),RGB(162,181,196),RGB(124,218,202),
-        RGB(32,67,69),RGB(224,250,242),RGB(13,48,48),RGB(34,47,61),RGB(46,61,76),RGB(36,49,63)};
-    return {RGB(253,254,255),RGB(216,227,236),RGB(22,44,62),RGB(94,116,133),RGB(12,109,108),
-        RGB(224,244,237),RGB(10,73,75),RGB(255,255,255),RGB(241,247,250),RGB(231,238,243),RGB(239,245,249)};
+    if(dark) return {RGB(25,36,47),RGB(52,68,82),RGB(237,244,248),RGB(168,186,200),RGB(111,216,196),
+        RGB(29,67,65),RGB(225,250,243),RGB(13,44,41),RGB(33,48,61),RGB(46,61,75),RGB(34,49,63)};
+    return {RGB(255,255,255),RGB(222,231,237),RGB(25,45,62),RGB(94,112,129),RGB(12,119,112),
+        RGB(230,246,240),RGB(12,76,68),RGB(255,255,255),RGB(241,247,248),RGB(232,238,242),RGB(241,246,248)};
   }
 };
 inline void Fill(HDC dc,RECT rect,COLORREF color) {

@@ -54,7 +54,7 @@ SIZE CandidateView::Measure(HDC dc,int maximum_width,int maximum_height){
 }
 void CandidateView::Draw(HDC dc,RECT bounds,int hover){
   const auto p=Palette::Get(dark_);const int left=bounds.left,top=bounds.top;
-  Rounded(dc,bounds,D(11),p.background,p.border);
+  Rounded(dc,bounds,D(12),p.background,p.border);
   int name_x=left+D(14);
   if(icon_){DrawIconEx(dc,name_x,top+D(14),icon_,D(16),D(16),0,nullptr,DI_NORMAL);name_x+=D(23);}
   Label(dc,L"言舟",{name_x,top+D(9),name_x+D(60),top+D(35)},caption_,p.text);
@@ -65,6 +65,7 @@ void CandidateView::Draw(HDC dc,RECT bounds,int hover){
   Rounded(dc,schema_button,D(5),p.chip,p.chip);
   auto schema_text=std::wstring(ime::kSchemaShortLabels[schema_])+L" ⇄";
   Label(dc,schema_text.c_str(),schema_button,small_,p.accent,DT_CENTER);
+  Fill(dc,{left+D(14),top+D(39),bounds.right-D(14),top+D(40)},p.line);
   if(has_code_){
     RECT code{left+D(15),top+D(39),bounds.right-D(15),top+RowsTop()-D(4)};
     Label(dc,state_.preedit[0]?state_.preedit:state_.input,code,primary_,p.accent);
@@ -75,7 +76,7 @@ void CandidateView::Draw(HDC dc,RECT bounds,int hover){
     RECT row{left+D(8),y,bounds.right-D(8),y+RowHeight()-D(2)};
     if(selected||int(i)==hover)Rounded(dc,row,D(7),selected?p.selection:p.hover,selected?p.selection:p.hover);
     RECT number{left+D(15),y+(RowHeight()-D(22))/2,left+D(37),y+(RowHeight()+D(22))/2};
-    if(selected)Rounded(dc,number,D(5),p.accent,p.accent);
+    Rounded(dc,number,D(6),selected?p.accent:p.chip,selected?p.accent:p.chip);
     auto index=std::to_wstring(i+1);
     Label(dc,index.c_str(),number,small_,selected?p.badge_text:p.muted,DT_CENTER);
     Label(dc,state_.candidates[i],{left+D(47),y,bounds.right-D(17),y+RowHeight()-D(2)},

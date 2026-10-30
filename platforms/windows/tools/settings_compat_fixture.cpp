@@ -27,7 +27,7 @@ int wmain(int argc,wchar_t** argv){
       const auto own=yanvy::ModuleDir(),store=own.parent_path();
       if(Read(store.parent_path()/L"compat-fixture.marker")!="YANVY isolated compatibility fixture")return 2;
       yanvy::machine_store_fixture_root=store;yanvy::machine_store_fixture_owner_sid=yanvy::UserSid();
-      yanvy::settings_compat_fixture_registered_runtime=store/L"0.1.4";
+      yanvy::settings_compat_fixture_registered_runtime=store/L"0.1.5";
       const HRESULT hr=yanvy::ForwardSupersededSettings(own);if(hr!=S_FALSE)return SUCCEEDED(hr)?0:3;
       Write(own/L"forwarded-launch.txt","current settings reached");return 0;
     }
@@ -38,7 +38,7 @@ int wmain(int argc,wchar_t** argv){
     yanvy::machine_store_fixture_owner_sid=yanvy::UserSid();
     Check(SUCCEEDED(Dacl(base/L"Program Files")),"protect fake Program Files");
     Write(base/L"Program Files"/L"compat-fixture.marker","YANVY isolated compatibility fixture");
-    const auto current=yanvy::MachineRuntimeRoot(L"0.1.4"),old=yanvy::MachineRuntimeRoot(L"0.1.2"),existing=yanvy::MachineRuntimeRoot(L"0.1.1");
+    const auto current=yanvy::MachineRuntimeRoot(L"0.1.5"),old=yanvy::MachineRuntimeRoot(L"0.1.4"),existing=yanvy::MachineRuntimeRoot(L"0.1.1");
     for(const auto& root:{current,old,existing})Check(SUCCEEDED(yanvy::PrepareMachineRuntime(root)),"create private protected version root");
     wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,DWORD(std::size(self)));
     std::filesystem::copy_file(self,current/L"YANVY-Settings.exe");
