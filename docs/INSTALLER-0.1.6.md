@@ -17,3 +17,5 @@
 已打开实际编译的原生预览窗口，检查 0.1.6 排版、控件和中文空格路径编辑，实际截图留存本机维护目录。最终安装包初始窗口检查和 CI 记录另在发行验证摘要补充。本机测试源进程为普通权限；实际管理员源进程、跨管理员凭据转交、另一台电脑的实际安装及该电脑是否关闭 UAC 尚未验证。本机没有关闭 UAC、切换内置管理员账户或代替用户确认系统授权。低完整性和 AppContainer 等受限进程直接拒绝，不尝试向桌面转交。
 
 依据：[Microsoft 错误码](https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--500-999-)；[通过 Explorer 启动普通用户进程](https://devblogs.microsoft.com/oldnewthing/20131118-00/?p=2643)；[关闭 UAC 的限制](https://devblogs.microsoft.com/oldnewthing/20150618-00/?p=45351)。
+
+正式发行已完成：tag `v0.1.6` 对应 `8ea23e53e01fe62d9fc048a6daf78f1f138f3e84`；[Windows CI](https://github.com/fengyuan0601-prog/yanvy-ime/actions/runs/41149897654) 与 [Linux CI](https://github.com/fengyuan0601-prog/yanvy-ime/actions/runs/41149897648) 均成功。最终包真实初始窗口与词库准备、同包重用、精确清理已验证，未知合成文件保留。本机测试未执行正式 TSF 注册或升级现用输入法。发布前独立 MSVC 夹具的头文件问题已修复，旧失败运行留作历史证据。发行后文档提交不改变安装包、tag 或同名资产。

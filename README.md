@@ -8,9 +8,9 @@
 
 ## 当前阶段
 
-0.1.6 安装权限修复正在准备：处理普通双击也可能继承管理员权限的环境，补充明确诊断。见 [安装修复记录](docs/INSTALLER-0.1.6.md)；目标设备结果仍待验证。
+**0.1.6 Windows 安装权限修复版已发布。** [下载安装包](https://github.com/fengyuan0601-prog/yanvy-ime/releases/download/v0.1.6/YANVY-0.1.6-windows-x64-setup.exe) · [对应源码、校验与验证摘要](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.6)。处理意外继承管理员权限的启动环境，补充明确的阶段、进程/桌面权限与 UAC 本机诊断。发行源码的 Windows/Linux Actions 已实际通过，本机最终包窗口与词库准备、同包重用、安全清理通过。另一台设备的具体权限来源与安装结果仍待确认；关闭 UAC 的全管理员桌面无法提供普通用户环境，软件会在写入前说明限制。见 [安装修复记录](docs/INSTALLER-0.1.6.md)。
 
-**0.1.5 Windows 正式版已交付。** [下载安装包](https://github.com/fengyuan0601-prog/yanvy-ime/releases/download/v0.1.5/YANVY-0.1.5-windows-x64-setup.exe) · [发行、校验文件与对应源码](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.5)。新版统一设置、安装与候选界面，五种输入方案可直接选择，提供深浅主题和实时预览。用户已安装并反馈没有问题，同意正式交付；本机 74 项安装文件哈希与版本、源码提交核对一致，当前引擎来自 0.1.5。已完成原生设置窗口与 18 组限定回归，具体证据及未验证范围见 [正式交付确认](docs/RELEASE-0.1.5-ACCEPTANCE.md) 与 [界面记录](docs/UI-0.1.5.md)。
+沿用 0.1.5 已获用户认可的设置、安装与候选界面。0.1.5 的本机 74 项文件和用户总体确认继续作为历史验收保留，见 [正式交付确认](docs/RELEASE-0.1.5-ACCEPTANCE.md) 与 [界面记录](docs/UI-0.1.5.md)；不能替代 0.1.6 的目标设备验收。
 
 Windows 首发范围为 Windows 11 x64 桌面系统，支持五笔86、全拼、小鹤双拼、自然码双拼和微软双拼，随包提供 x64/x86 TSF 组件。词库位置可选择；系统程序使用受保护目录，设置和缓存单独保存。升级先安装新版，再安全清理旧文件。本轮已修复快捷键、安装权限边界与失败回滚问题，实际安装和应用验收仍在继续，不能把隔离测试当作所有软件兼容的证明。安装包未签名，尚无 Android 或 iPhone 安装包。详见 [本轮审计与验证记录](docs/RELEASE-AUDIT-2026-10-28.md)。`core/build/ime-core` 是开发诊断程序。
 
@@ -21,10 +21,10 @@ Windows 首发范围为 Windows 11 x64 桌面系统，支持五笔86、全拼、
 | 原生 C++ / librime 核心 | 已实现；当前 Linux 构建 42 项集成检查通过 |
 | 五笔86、全拼与三种双拼候选、提交 | 已实现；本轮 Windows 核心 68 PASS、1 SKIP，原始 Linux 报告另行保留 |
 | 默认不学习与配置保护 | 本轮功能与反例检查通过；原两项绕过及相邻缓存入口已独立复核 |
-| Windows 系统输入法 / 安装包 | 0.1.5 正式交付；本机 74 项文件核对及用户总体确认通过；其他实际应用范围见交付确认与审计记录 |
+| Windows 系统输入法 / 安装包 | 0.1.6 安装权限修复已发布；发行源码 CI、本机窗口与数据事务通过；目标设备实装仍待确认 |
 | Android / iOS 原生键盘 | 后续阶段 |
 | 九宫格、成熟整句纠错、本地自定义短语 | 后续阶段，不属于当前核心已验证功能 |
-| GitHub 官方仓库 | 已公开 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)，[0.1.5 正式发行](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.5) |
+| GitHub 官方仓库 | 已公开 [fengyuan0601-prog/yanvy-ime](https://github.com/fengyuan0601-prog/yanvy-ime)，[0.1.6 修复发行](https://github.com/fengyuan0601-prog/yanvy-ime/releases/tag/v0.1.6) |
 
 远程源码以官方仓库 `main` 的实际内容为准；CI 结果以 [GitHub Actions](https://github.com/fengyuan0601-prog/yanvy-ime/actions) 的实际运行记录为准。上面的42项来自原始 Linux 报告；GitHub Linux/Windows CI 的通过记录和实际边界另见发布与 Windows 接续记录。
 
