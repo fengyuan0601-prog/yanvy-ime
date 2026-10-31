@@ -69,7 +69,7 @@ jobs:
       - name: Render native candidate UI at three scales
         shell: pwsh
         run: |
-          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-COM-Registry-Fixture YANVY-Broker-Stop-Fixture YANVY-Machine-Store-Fixture YANVY-User-Cleanup-Fixture YANVY-Runtime-Environment-Fixture YANVY-Installer-Diagnostics-Fixture YANVY-TSF-Identity-Fixture
+          cmake --build build/windows --config Release --target YANVY-UI-Render YANVY-Installer-Preview YANVY-Preferences-Fixture YANVY-Registration-Fixture YANVY-Edit-Session-Fixture YANVY-Broker-Fixture YANVY-Tray-Event-Fixture YANVY-Input-Mode-Fixture YANVY-TSF-Mode-Fixture YANVY-COM-Registry-Fixture YANVY-Broker-Stop-Fixture YANVY-Machine-Store-Fixture YANVY-User-Cleanup-Fixture YANVY-Runtime-Environment-Fixture YANVY-Installer-Diagnostics-Fixture YANVY-Installer-Startup-Fixture YANVY-TSF-Identity-Fixture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-UI-Render.exe --check-layout
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -92,6 +92,8 @@ jobs:
           & build/windows/Release/YANVY-Runtime-Environment-Fixture.exe (Join-Path (Resolve-Path build/windows).Path 'runtime-fixture')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-Installer-Diagnostics-Fixture.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/windows/Release/YANVY-Installer-Startup-Fixture.exe --policy-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & build/windows/Release/YANVY-TSF-Identity-Fixture.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -23,6 +23,6 @@ inline std::filesystem::path ResolveSelectedInstallPath(const std::filesystem::p
   return empty||reusable?selected:ResolveInstallPath(selected);
 }
 bool ValidInstallPath(const std::filesystem::path& path);
-int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show);
+int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show,DWORD startup_error=0);
 int RenderInstaller(HINSTANCE instance,const std::filesystem::path& output,UINT dpi,int page);
 }

@@ -4,10 +4,12 @@
 namespace yanvy {
 // New service identity allows an already-running host to instantiate this
 // implementation even when it still holds the old service's COM instance.
-inline constexpr GUID kService{0x41bd1177,0x8136,0x44da,{0xb0,0x2a,0xc3,0x71,0xf9,0xe8,0x6f,0x23}};
+inline constexpr GUID kService{0x84d3504b,0x6482,0x4c0b,{0xb9,0x41,0x3d,0x7d,0xa8,0x21,0xf6,0x19}};
+inline constexpr GUID kPreviousDesignService{0x41bd1177,0x8136,0x44da,{0xb0,0x2a,0xc3,0x71,0xf9,0xe8,0x6f,0x23}};
 // Keep the accepted 0.1.4 service usable until the new identity is enabled.
 inline constexpr GUID kPreviousVisualService{0x56fb5b85,0x3902,0x49ed,{0x95,0xcd,0x03,0x64,0x26,0x34,0x4a,0x53}};
-inline constexpr GUID kProfile{0x54162702,0x7506,0x48b9,{0x8d,0x68,0xb8,0xb7,0x77,0x0e,0xa5,0xa2}};
+inline constexpr GUID kProfile{0xd58d051b,0x07e7,0x410b,{0x91,0x90,0x75,0xd0,0x93,0xc9,0xed,0x3c}};
+inline constexpr GUID kPreviousDesignProfile{0x54162702,0x7506,0x48b9,{0x8d,0x68,0xb8,0xb7,0x77,0x0e,0xa5,0xa2}};
 inline constexpr GUID kPreviousVisualProfile{0x1501319b,0x8c28,0x4f57,{0x93,0xf0,0x4e,0xee,0xe2,0x45,0x04,0xf0}};
 // 0.1.3 can remain loaded while its original settings entry is forwarded.
 inline constexpr GUID kPreviousRepairService{0xa00b55ba,0x4d04,0x4d88,{0x9c,0x10,0x44,0xc1,0xf3,0xb1,0x18,0x9e}};
@@ -28,7 +30,8 @@ inline GUID kToggleEnglish{},kToggleEnglishRelease{};
 inline constexpr GUID kToggleEnglish{0x98120b62,0x08ea,0x460a,{0xaf,0x87,0xc2,0x74,0x21,0x37,0xb3,0x19}};
 inline constexpr GUID kToggleEnglishRelease{0xb5a56252,0x8224,0x4d56,{0x86,0x71,0x65,0x12,0xd2,0x2b,0x2c,0x45}};
 #endif
-inline constexpr wchar_t kClsid[] = L"{41BD1177-8136-44DA-B02A-C371F9E86F23}";
+inline constexpr wchar_t kClsid[] = L"{84D3504B-6482-4C0B-B941-3D7DA821F619}";
+inline constexpr wchar_t kPreviousDesignClsid[] = L"{41BD1177-8136-44DA-B02A-C371F9E86F23}";
 inline constexpr wchar_t kPreviousVisualClsid[] = L"{56FB5B85-3902-49ED-95CD-036426344A53}";
 inline constexpr wchar_t kPreviousRepairClsid[] = L"{A00B55BA-4D04-4D88-9C10-44C1F3B1189E}";
 inline constexpr wchar_t kPreviousNativeClsid[] = L"{E14B5F1F-B302-4D99-B957-6E9588ACB7CC}";
@@ -36,6 +39,7 @@ inline constexpr wchar_t kPreviousClsid[] = L"{9877E941-5F7A-4F0A-8973-AF5A66681
 inline constexpr wchar_t kLegacyClsid[] = L"{F0F81899-01E7-4F10-9C09-9C8C36674184}";
 struct PreviousTextService { const GUID* service;const GUID* profile;const wchar_t* clsid; };
 inline constexpr PreviousTextService kPreviousTextServices[] = {
+  {&kPreviousDesignService,&kPreviousDesignProfile,kPreviousDesignClsid},
   {&kPreviousVisualService,&kPreviousVisualProfile,kPreviousVisualClsid},
   {&kPreviousRepairService,&kPreviousRepairProfile,kPreviousRepairClsid},
   {&kPreviousNativeService,&kPreviousNativeProfile,kPreviousNativeClsid},

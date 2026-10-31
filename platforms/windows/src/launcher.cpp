@@ -8,6 +8,7 @@
 #include "machine_store.hpp"
 #include "package_integrity.hpp"
 #include "installer_transaction.hpp"
+#include "installer_startup.hpp"
 
 namespace {
 #ifndef YANVY_PREVIEW_ONLY
@@ -76,7 +77,7 @@ int Worker(HINSTANCE instance,bool uninstall,const std::filesystem::path& target
 // User-selected data paths are processed only with the original medium token.
 // This payload contains dictionaries/documents, never an executable or DLL.
 int DataWorker(HINSTANCE instance,const std::filesystem::path& target,bool cleanup){
-  if(IsUserAnAdmin())return ERROR_ELEVATION_REQUIRED;
+  if(const DWORD permission=yanvy::InstallerUserPermission())return int(permission);
   if(!yanvy::ValidInstallPath(target))return 10;
   yanvy::InstallerTransaction cleanup_transaction;
   if(cleanup){
@@ -156,12 +157,21 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
     else if(option==L"--worker-install"&&count==4&&wcslen(args[3])==1&&args[3][0]>=L'0'&&args[3][0]<L'0'+ime::kSchemaCount)result=Worker(instance,false,args[2],uint32_t(args[3][0]-L'0'));
     else if(option==L"--worker-uninstall"&&count==3)result=Worker(instance,true,args[2],1);
 #endif
-    else if(option.empty()||option==L"--preview"){
+    else if((option.empty()&&count==1)||((option==L"--preview"||option==L"--desktop-ui")&&count==2)){
 #ifdef YANVY_PREVIEW_ONLY
       result=yanvy::InstallerUI(instance,false,true,show);
 #else
       bool installer=FindResourceW(instance,MAKEINTRESOURCEW(101),RT_RCDATA)!=nullptr;
-      result=yanvy::InstallerUI(instance,!installer,option==L"--preview",show);
+      DWORD startup_error=0;
+      if(option!=L"--preview"){
+        startup_error=yanvy::InstallerUserPermission();
+        if(startup_error==ERROR_ELEVATION_REQUIRED&&option!=L"--desktop-ui"){
+          wchar_t file[32768]{};const DWORD length=GetModuleFileNameW(nullptr,file,DWORD(std::size(file)));
+          const HRESULT opened=length&&length<std::size(file)?yanvy::OpenInstallerOnDesktop(file):E_FAIL;
+          if(SUCCEEDED(opened)){LocalFree(args);CoUninitialize();return 0;}
+        }
+      }
+      result=yanvy::InstallerUI(instance,!installer,option==L"--preview",show,startup_error);
 #endif
     }
     LocalFree(args);

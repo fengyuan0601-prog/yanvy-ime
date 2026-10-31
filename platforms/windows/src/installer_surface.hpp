@@ -3,7 +3,7 @@
   void Fonts(){ClearFonts();body=Font(D(14));caption_font=Font(D(12));headline=Font(D(27),FW_SEMIBOLD);brand=Font(D(32),FW_SEMIBOLD);strong=Font(D(14),FW_SEMIBOLD);
     icon=static_cast<HICON>(LoadImageW(instance,MAKEINTRESOURCEW(1),IMAGE_ICON,D(52),D(52),LR_SHARED));}
   const wchar_t* Title()const{return page==1?(uninstall?L"正在卸载言舟":L"正在为你准备言舟"):page==2?(uninstall?(configuration_failed?L"已卸载，清理需检查":L"已完成卸载"):configuration_failed?L"已安装，配置需检查":L"安装完成，准备输入"):page==3?L"还差一步，请检查":uninstall?L"卸载言舟":L"欢迎使用言舟";}
-  const wchar_t* Primary()const{return page==1?L"正在处理…":page==2?L"完成":page==3?L"重新尝试":uninstall?L"确认卸载":L"开始安装";}
+  const wchar_t* Primary()const{return startup_blocked?L"关闭":page==1?L"正在处理…":page==2?L"完成":page==3?L"重新尝试":uninstall?L"确认卸载":L"开始安装";}
   void Text(HDC dc,const wchar_t* text,RECT rect,HFONT font,COLORREF color,bool wrap=false){
     if(!wrap){Label(dc,text,rect,font,color);return;}auto old=SelectObject(dc,font);SetBkMode(dc,TRANSPARENT);SetTextColor(dc,color);DrawTextW(dc,text,-1,&rect,DT_LEFT|DT_WORDBREAK|DT_NOPREFIX);SelectObject(dc,old);
   }
@@ -18,7 +18,7 @@
     Text(dc,L"免费开源，无广告",R(34,449,202,475),caption_font,p.muted);Text(dc,L"一念开物 · IDEORIN",R(32,512,210,541),caption_font,p.muted);
     Text(dc,uninstall?L"卸载向导":L"WINDOWS 输入法",R(256,28,520,51),caption_font,p.muted);Label(dc,kVersion,R(650,28,768,51),caption_font,p.muted,DT_RIGHT);
     if(!live)Text(dc,Title(),R(256,68,768,111),headline,p.text);
-    const wchar_t* subtitle=page==1?L"请保持窗口打开，完成后即可开始使用。":page==2?(uninstall?L"感谢使用。你的其他输入方式不受影响。":configuration_failed?L"请查看下方提示，完成当前用户的配置。":L"从系统输入法列表选择言舟，开启新的输入体验。"):
+    const wchar_t* subtitle=startup_blocked?L"当前启动权限不适合准备用户词库，尚未执行安装或卸载。":page==1?L"请保持窗口打开，完成后即可开始使用。":page==2?(uninstall?L"感谢使用。你的其他输入方式不受影响。":configuration_failed?L"请查看下方提示，完成当前用户的配置。":L"从系统输入法列表选择言舟，开启新的输入体验。"):
       page==3?L"按下方提示调整后重试，你也可以查看本机诊断。":uninstall?L"移除言舟的系统组件，保留你的个人设置。":L"全拼、双拼、五笔，一套熟悉的输入习惯。";
     Text(dc,subtitle,R(256,122,768,160),body,p.muted,true);
     if(page==0||page==3){
@@ -64,7 +64,7 @@
     StyleCombo(schema_box,false,dpi);
     SetWindowTextW(notes,NeedsDiagnostic()?L"查看诊断":L"版本与许可");SetWindowTextW(heading,Title());SetWindowTextW(primary,Primary());SetWindowTextW(status_control,status.c_str());SetWindowTextW(path_control,target.c_str());
     EnableWindow(primary,page!=1);ShowWindow(secondary,page!=1&&page!=2?SW_SHOW:SW_HIDE);ShowWindow(settings,page==2&&!uninstall?SW_SHOW:SW_HIDE);
-    ShowWindow(browse,(page==0||page==3)&&!uninstall?SW_SHOW:SW_HIDE);ShowWindow(path_control,page==0||page==3?SW_SHOW:SW_HIDE);
+    ShowWindow(browse,(page==0||page==3)&&!uninstall?SW_SHOW:SW_HIDE);EnableWindow(browse,!startup_blocked);EnableWindow(path_control,!startup_blocked);EnableWindow(schema_box,!startup_blocked);ShowWindow(path_control,page==0||page==3?SW_SHOW:SW_HIDE);
     ShowWindow(schema_box,(page==0||page==3)&&!uninstall?SW_SHOW:SW_HIDE);SendMessageW(schema_box,CB_SETCURSEL,schema,0);
     ShowWindow(progress,page==1?SW_SHOW:SW_HIDE);SendMessageW(progress,PBM_SETMARQUEE,page==1,35);EnableWindow(notes,page!=1);InvalidateRect(window,nullptr,FALSE);
   }

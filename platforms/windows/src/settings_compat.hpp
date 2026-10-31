@@ -40,7 +40,7 @@ inline HRESULT ForwardSupersededSettings(const std::filesystem::path& own){
   DWORD error=0;
   return StartUserProcess(target,L"\""+target.wstring()+L"\"",current,&error)?S_OK:HRESULT_FROM_WIN32(error);
 }
-inline constexpr const wchar_t* kSettingsCompatibilityVersions[]={L"0.1.0",L"0.1.1",L"0.1.2",L"0.1.3",L"0.1.4"};
+inline constexpr const wchar_t* kSettingsCompatibilityVersions[]={L"0.1.0",L"0.1.1",L"0.1.2",L"0.1.3",L"0.1.4",L"0.1.5"};
 template<class ScheduleRemoval>
 HRESULT RestoreMissingSettingsEntries(const std::filesystem::path& current,ScheduleRemoval schedule){
   HRESULT hr=ValidateMachineRuntime(current);if(FAILED(hr))return hr;

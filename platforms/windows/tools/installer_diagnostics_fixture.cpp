@@ -6,7 +6,7 @@ int wmain() {
   using namespace yanvy;
   InstallerEnvironment env{true,10,0,26100,PROCESSOR_ARCHITECTURE_AMD64,PROCESSOR_ARCHITECTURE_INTEL};
   auto report=FormatInstallerDiagnostic(InstallerPhase::engine_check,0xC000001D,env);
-  const std::wstring expected=std::wstring(L"YANVY diagnostic v1\r\nrelease=")+kVersion+L"\r\nwindows=10.0.26100\r\nnative_arch=x64\r\nprocess_arch=x86\r\nphase=engine-check\r\nresult=0xC000001D\r\ncategory=illegal-instruction\r\n";
+  const std::wstring expected=std::wstring(L"YANVY diagnostic v1\r\nrelease=")+kVersion+L"\r\nwindows=10.0.26100\r\nnative_arch=x64\r\nprocess_arch=x86\r\nphase=engine-check\r\nresult=0xC000001D\r\ncategory=illegal-instruction\r\nprocess_token=unknown\r\ndesktop_token=unknown\r\nuac_setting=unknown\r\n";
   if(report!=expected)return 1;
   report=FormatInstallerDiagnostic(InstallerPhase::engine_check,26,env);
   if(report.find(L"original-exit-unavailable")==std::wstring::npos)return 2;
@@ -16,6 +16,11 @@ int wmain() {
   if(report.find(L"windows=unknown\r\nnative_arch=unknown\r\nprocess_arch=unknown\r\nphase=unknown")==std::wstring::npos ||
      report.find(L"dependency-not-found")==std::wstring::npos)return 4;
   auto actual=CollectInstallerEnvironment();
+  report=FormatInstallerDiagnostic(InstallerPhase::startup,ERROR_ELEVATION_REQUIRED,env);
+  if(report.find(L"phase=startup\r\nresult=0x000002E4\r\ncategory=elevation-required")==std::wstring::npos)return 6;
+  if(std::wstring(DiagnosticExitCategory(0x800702E4))!=L"elevation-required"||
+      std::wstring(DiagnosticExitCategory(ERROR_CANCELLED))!=L"authorization-cancelled"||
+      std::wstring(DiagnosticExitCategory(ERROR_ACCESS_DENIED))!=L"access-denied")return 7;
   if(actual.native_architecture==PROCESSOR_ARCHITECTURE_UNKNOWN || actual.process_architecture==PROCESSOR_ARCHITECTURE_UNKNOWN)return 5;
   // No collected machine details are written by this fixture.
   std::cout << "Minimal installer diagnostics and privacy whitelist PASS\n";

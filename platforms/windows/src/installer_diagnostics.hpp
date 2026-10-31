@@ -4,17 +4,22 @@
 #include <cstring>
 #include <string>
 #include "version.hpp"
+#include "installer_startup.hpp"
 
 namespace yanvy {
 // A closed set of phases avoids passing command lines, paths, or exception
 // messages into user-shareable diagnostics. The worker supplies the phase;
 // an exit status alone cannot reliably identify which operation failed.
 enum class InstallerPhase {
-  unknown, destination, extraction, dependencies, engine_launch, engine_check,
+  unknown, startup, data_prepare, machine_install, user_configuration, destination, extraction, dependencies, engine_launch, engine_check,
   registration, rollback, cleanup, uninstall
 };
 inline const wchar_t* DiagnosticPhaseName(InstallerPhase phase) {
   switch (phase) {
+    case InstallerPhase::startup: return L"startup";
+    case InstallerPhase::data_prepare: return L"data-prepare";
+    case InstallerPhase::machine_install: return L"machine-install";
+    case InstallerPhase::user_configuration: return L"user-configuration";
     case InstallerPhase::destination: return L"destination";
     case InstallerPhase::extraction: return L"extraction";
     case InstallerPhase::dependencies: return L"dependencies";
@@ -36,12 +41,26 @@ inline const wchar_t* DiagnosticArchitecture(WORD architecture) {
     default: return L"unknown";
   }
 }
+enum class InstallerPrivilege { unknown,ordinary,elevated,restricted };
+enum class InstallerUac { unknown,enabled,disabled };
 struct InstallerEnvironment {
   bool windows_version_known = false;
   DWORD major = 0, minor = 0, build = 0;
   WORD native_architecture = PROCESSOR_ARCHITECTURE_UNKNOWN;
   WORD process_architecture = PROCESSOR_ARCHITECTURE_UNKNOWN;
+  InstallerPrivilege process_token = InstallerPrivilege::unknown;
+  InstallerPrivilege desktop_token = InstallerPrivilege::unknown;
+  InstallerUac uac_setting = InstallerUac::unknown;
 };
+inline InstallerPrivilege InstallerTokenState(const InstallerToken& token){
+  return token.elevated?InstallerPrivilege::elevated:OrdinaryInstallerToken(token)?InstallerPrivilege::ordinary:InstallerPrivilege::restricted;
+}
+inline const wchar_t* InstallerTokenName(InstallerPrivilege state){
+  switch(state){case InstallerPrivilege::elevated:return L"elevated";case InstallerPrivilege::ordinary:return L"ordinary";case InstallerPrivilege::restricted:return L"restricted";default:return L"unknown";}
+}
+inline const wchar_t* InstallerUacName(InstallerUac state){
+  switch(state){case InstallerUac::enabled:return L"enabled";case InstallerUac::disabled:return L"disabled";default:return L"unknown";}
+}
 inline InstallerEnvironment CollectInstallerEnvironment() {
   InstallerEnvironment result;
   SYSTEM_INFO system{}; GetNativeSystemInfo(&system);
@@ -67,6 +86,14 @@ inline InstallerEnvironment CollectInstallerEnvironment() {
     result.major = version.dwMajorVersion; result.minor = version.dwMinorVersion;
     result.build = version.dwBuildNumber;
   }
+  InstallerToken token;
+  if(SUCCEEDED(ReadInstallerToken(GetCurrentProcess(),token)))result.process_token=InstallerTokenState(token);
+  DWORD pid=0;GetWindowThreadProcessId(GetShellWindow(),&pid);
+  HANDLE shell=pid?OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid):nullptr;
+  if(shell){if(SUCCEEDED(ReadInstallerToken(shell,token)))result.desktop_token=InstallerTokenState(token);CloseHandle(shell);}
+  DWORD enabled=0,bytes=sizeof(enabled);
+  if(RegGetValueW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",L"EnableLUA",
+      RRF_RT_REG_DWORD|RRF_SUBKEY_WOW6464KEY,nullptr,&enabled,&bytes)==ERROR_SUCCESS)result.uac_setting=enabled?InstallerUac::enabled:InstallerUac::disabled;
   return result;
 }
 inline std::wstring DiagnosticHex(DWORD code) {
@@ -78,6 +105,9 @@ inline std::wstring DiagnosticHex(DWORD code) {
 inline const wchar_t* DiagnosticExitCategory(DWORD code) {
   switch (code) {
     case 0: return L"success";
+    case ERROR_ELEVATION_REQUIRED: case 0x800702E4: return L"elevation-required";
+    case ERROR_CANCELLED: case 0x800704C7: return L"authorization-cancelled";
+    case ERROR_ACCESS_DENIED: case 0x80070005: return L"access-denied";
     case 0xC000001D: return L"illegal-instruction";
     case 0xC0000005: return L"access-violation";
     case 0xC000007B: return L"invalid-image-format";
@@ -106,6 +136,10 @@ inline std::wstring FormatInstallerDiagnostic(InstallerPhase phase, DWORD result
   const DWORD child = wrapped ? result & 0xFFFFu : result;
   if (wrapped) text += L"\r\nchild_exit=" + DiagnosticHex(child);
   text += L"\r\ncategory="; text += DiagnosticExitCategory(child);
+  text += L"\r\nprocess_token="; text += InstallerTokenName(environment.process_token);
+  text += L"\r\ndesktop_token="; text += InstallerTokenName(environment.desktop_token);
+  text += L"\r\nuac_setting="; text += InstallerUacName(environment.uac_setting);
+  if(phase==InstallerPhase::startup&&result==ERROR_ELEVATION_REQUIRED)text+=L"\r\nrequired_context=ordinary-user";
   if (phase == InstallerPhase::engine_check && result == 26)
     text += L"\r\nlegacy_detail=original-exit-unavailable";
   text += L"\r\n";

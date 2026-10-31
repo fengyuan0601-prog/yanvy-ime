@@ -10,6 +10,7 @@
 #include "broker_upgrade.hpp"
 #include "package_integrity.hpp"
 #include "installer_transaction.hpp"
+#include "installer_startup.hpp"
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
@@ -59,6 +60,7 @@ struct View {
   enum class Stage { none, prepare_data, machine, enable_user, stop_legacy, apply_schema, verify_broker, cleanup_data };
   Stage stage=Stage::none;bool data_prepared=false,configuration_failed=false,show_diagnostics=false;
   DWORD machine_result=0;
+  bool startup_blocked=false;
   DWORD cleanup_result=0;bool cleanup_done=false;
   InstallerPhase diagnostic_phase=InstallerPhase::unknown;
   std::filesystem::path previous_install,previous_data,uninstall_data;
@@ -89,12 +91,14 @@ struct View {
   std::filesystem::path Runtime()const{return uninstall?ModuleDir():MachineRuntimeRoot(kVersion);}
   std::filesystem::path Self()const{wchar_t path[32768]{};GetModuleFileNameW(nullptr,path,32768);return path;}
   bool Spawn(const std::filesystem::path& executable,const std::wstring& arguments,Stage next){
+    if(next!=Stage::cleanup_data)diagnostic_phase=next==Stage::prepare_data?InstallerPhase::data_prepare:next==Stage::stop_legacy?InstallerPhase::cleanup:InstallerPhase::user_configuration;
     std::wstring command=L"\""+executable.wstring()+L"\" "+arguments;
     STARTUPINFOW startup{sizeof(startup)};PROCESS_INFORMATION process{};
     if(!CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,executable.parent_path().c_str(),&startup,&process))return false;
     CloseHandle(process.hThread);worker=process.hProcess;stage=next;page=1;SetTimer(window,1,200,nullptr);Refresh();return true;
   }
   bool StartMachine(){
+    diagnostic_phase=uninstall?InstallerPhase::uninstall:InstallerPhase::machine_install;
     auto exe=Self();std::wstring arguments=std::wstring(uninstall?L"--worker-uninstall ":L"--worker-install ")+L"\""+target.wstring()+L"\"";
     if(!uninstall)arguments+=L" "+std::to_wstring(schema);
     SHELLEXECUTEINFOW launch{sizeof(launch)};launch.fMask=SEE_MASK_NOCLOSEPROCESS|SEE_MASK_NOASYNC|SEE_MASK_FLAG_NO_UI;
@@ -105,10 +109,11 @@ struct View {
   }
   void Start(){
     if(preview){status=L"界面预览不执行安装，也不更改系统输入法。";Refresh();return;}
+    if(const DWORD permission=InstallerUserPermission()){startup_blocked=true;diagnostic_phase=InstallerPhase::startup;Fail(permission);return;}
     // A retry can select a different path. Cleanup ownership never transfers
     // from a previous failed attempt to the newly selected directory.
     configuration_failed=false;data_prepared=false;result=0;machine_result=0;cleanup_result=0;cleanup_done=false;broker_checked=false;diagnostic_phase=InstallerPhase::unknown;
-    if(!ValidInstallPath(target)){result=10;status=L"位置无效：请选择本地普通文件夹。";page=3;Refresh();return;}
+    if(!ValidInstallPath(target)){diagnostic_phase=InstallerPhase::destination;result=10;status=L"位置无效：请选择本地普通文件夹。";page=3;Refresh();return;}
     const auto sid=UserSid();if(sid.empty()){Fail(ERROR_ACCESS_DENIED);return;}
     const DWORD locked=transaction.Acquire(L"Global\\YANVY.Setup.User."+sid);if(locked){Fail(locked);return;}
     if(!uninstall){const DWORD read=ReadPreviousInstallation(previous_install,previous_data);if(read){Fail(read);return;}}
@@ -119,6 +124,12 @@ struct View {
     if(!started)Fail(GetLastError());
   }
   std::wstring FailureText()const{
+    if(result==ERROR_ELEVATION_REQUIRED){
+      const auto environment=CollectInstallerEnvironment();
+      if(environment.uac_setting==InstallerUac::disabled)return L"检测到 UAC 已关闭，无法取得普通用户环境。请恢复 Windows 用户账户控制后重试。";
+      return L"未能取得普通用户环境。请查看诊断，并检查账户及“始终以管理员身份运行”设置。";
+    }
+    if(result==ERROR_ACCESS_DENIED||result==DWORD(E_ACCESSDENIED))return L"Windows 拒绝了访问，请检查当前账户与所选位置的权限。";
     if(result==ERROR_CANCELLED)return uninstall?L"已取消管理员授权，未执行卸载。":L"已取消管理员授权。词库准备内容将安全回退。";
     if(result==10)return L"目录已有文件，或不是有效的本地词库位置。";
     if(result==11)return L"已有安装未通过同包完整性确认，原文件已保留。请查看诊断。";
@@ -192,7 +203,7 @@ struct View {
       if(UserStep(L"YANVY-Setup.exe",L"--enable-user",Stage::enable_user))return;
       configuration_failed=true;result=GetLastError();Finish();return;
     }
-    if(code!=0){configuration_failed=true;result=code;diagnostic_phase=finished==Stage::stop_legacy?InstallerPhase::cleanup:InstallerPhase::unknown;}
+    if(code!=0){configuration_failed=true;result=code;if(finished==Stage::stop_legacy)diagnostic_phase=InstallerPhase::cleanup;}
     if(finished==Stage::enable_user){
       status=L"正在切换到新版引擎…";std::wstring stop=L"--stop-previous-brokers";
       if(upgrade_broker.pid)stop+=L" "+std::to_wstring(upgrade_broker.pid)+L" "+std::to_wstring(upgrade_broker.created)+L" \""+previous_install.wstring()+L"\"";
@@ -246,7 +257,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   if(message==WM_TIMER&&v->worker&&WaitForSingleObject(v->worker,0)==WAIT_OBJECT_0){
     KillTimer(window,1);DWORD code=ERROR_GEN_FAILURE;GetExitCodeProcess(v->worker,&code);CloseHandle(v->worker);v->worker=nullptr;v->Complete(code);return 0;}
   if(message==WM_COMMAND){if(LOWORD(wp)==111&&HIWORD(wp)==EN_CHANGE){if(v->path_control){wchar_t path[32768]{};GetWindowTextW(v->path_control,path,32768);v->target=std::filesystem::path(path);}return 0;}if(LOWORD(wp)==114&&HIWORD(wp)==CBN_SELCHANGE){v->schema=uint32_t(SendMessageW(v->schema_box,CB_GETCURSEL,0,0));return 0;}switch(LOWORD(wp)){
-    case primary_id:if(v->page==2)DestroyWindow(window);else if(v->page!=1)v->Start();return 0;
+    case primary_id:if(v->page==2||v->startup_blocked)DestroyWindow(window);else if(v->page!=1)v->Start();return 0;
     case secondary_id:if(v->page!=1)DestroyWindow(window);return 0;
     case browse_id:v->Browse();return 0;
     case settings_id:{const auto runtime=v->Runtime();if(FAILED(ValidateMachineRuntime(runtime))){v->configuration_failed=true;v->result=ERROR_ACCESS_DENIED;v->status=L"系统组件验证未通过，请查看诊断。";v->Refresh();return 0;}auto exe=runtime/L"YANVY-Settings.exe";ShellExecuteW(window,L"open",exe.c_str(),nullptr,runtime.c_str(),SW_SHOWNORMAL);return 0;}
@@ -259,7 +270,7 @@ LRESULT CALLBACK Proc(HWND window,UINT message,WPARAM wp,LPARAM lp){
   return DefWindowProcW(window,message,wp,lp);
 }
 }
-int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show){
+int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show,DWORD startup_error){
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_PROGRESS_CLASS|ICC_STANDARD_CLASSES};InitCommonControlsEx(&controls);
   View view;view.instance=instance;view.uninstall=uninstall;view.preview=preview;if(uninstall)view.target=ModuleDir();
@@ -268,6 +279,7 @@ int InstallerUI(HINSTANCE instance,bool uninstall,bool preview,int show){
       view.schema=ReadSchemaPreference(PreferenceRoot(view.previous_install));
       PackageManifest manifest;const bool reusable=SameMachinePath(view.previous_install,view.Runtime())&&SUCCEEDED(ValidateMachineRuntime(view.previous_install))&&ValidInstallPath(view.previous_data)&&LoadPackageManifest(instance,manifest)&&InspectPackageDestination(view.previous_data,manifest,true)==PackageDestination::reusable;
       view.target=SelectExistingInstallData(view.target,view.previous_install,view.Runtime(),view.previous_data,reusable);}}
+  if(startup_error){view.startup_blocked=true;view.page=3;view.result=startup_error;view.diagnostic_phase=InstallerPhase::startup;view.status=view.FailureText();}
   WNDCLASSW wc{};wc.hInstance=instance;wc.lpfnWndProc=Proc;wc.lpszClassName=L"YANVY.Setup.rc1";wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));RegisterClassW(&wc);
   UINT dpi=FitSurfaceDpi(nullptr,GetDpiForSystem(),800,560);RECT rect{0,0,MulDiv(800,int(dpi),96),MulDiv(560,int(dpi),96)};DWORD style=WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX;AdjustWindowRectExForDpi(&rect,style,FALSE,0,dpi);
   HWND window=CreateWindowExW(WS_EX_CONTROLPARENT,wc.lpszClassName,uninstall?L"言舟 · 卸载":L"言舟 · 安装",style,CW_USEDEFAULT,CW_USEDEFAULT,rect.right-rect.left,rect.bottom-rect.top,nullptr,nullptr,instance,&view);
