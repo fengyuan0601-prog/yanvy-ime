@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 #pragma once
 #include <windows.h>
+#include <objbase.h>
+#include <oleauto.h>
 #include <exdisp.h>
 #include <shlobj.h>
 #include <shldisp.h>

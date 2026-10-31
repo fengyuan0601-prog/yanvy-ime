@@ -165,7 +165,9 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
       DWORD startup_error=0;
       if(option!=L"--preview"){
         startup_error=yanvy::InstallerUserPermission();
-        if(startup_error==ERROR_ELEVATION_REQUIRED&&option!=L"--desktop-ui"){
+        yanvy::InstallerToken token;
+        if(startup_error==ERROR_ELEVATION_REQUIRED&&option!=L"--desktop-ui"&&
+            SUCCEEDED(yanvy::ReadInstallerToken(GetCurrentProcess(),token))&&token.elevated){
           wchar_t file[32768]{};const DWORD length=GetModuleFileNameW(nullptr,file,DWORD(std::size(file)));
           const HRESULT opened=length&&length<std::size(file)?yanvy::OpenInstallerOnDesktop(file):E_FAIL;
           if(SUCCEEDED(opened)){LocalFree(args);CoUninitialize();return 0;}
